@@ -80,6 +80,19 @@
       High:{color:"#DC2626",bg:"#FEF2F2",border:"#FECACA"},
       Severe:{color:"#7F1D1D",bg:"#FEE2E2",border:"#FCA5A5"}
     };
+    /* Ver63: IRC reference MD files that must load before analysis */
+    var GITHUB_BASE_URL="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver63/main/guidelines/";
+    var IRC_REF_FILES=[
+      {file:"IRC_37_2018_Extracted.md",            label:"IRC:37",     version:"2018"},
+      {file:"IRC_52_2019_Extraction.md",           label:"IRC:52",     version:"2019"},
+      {file:"IRC_73_1980_Extraction.md",           label:"IRC:73",     version:"1980"},
+      {file:"IRC_SP13_DPR_Analyzer_Extraction.md", label:"IRC:SP:13",  version:"—"},
+      {file:"IRC_SP19_DPR_Analyzer_Extraction.md", label:"IRC:SP:19",  version:"—"},
+      {file:"IRC_SP42_2014_DPR_Analyzer_Extraction.md",label:"IRC:SP:42",version:"2014"},
+      {file:"IRC_SP48_2023_DPR_Analyzer_Extraction.md",label:"IRC:SP:48",version:"2023"},
+      {file:"MoRTH_DPR_Reference_Extract.md",      label:"MoRTH 5th Revision", version:"5th Rev"}
+    ];
+
     var STANDARD_GUIDELINES = [
       {code:"IRC:37",title:"Design of Flexible Pavements",category:"Pavement",hasRef:true},
       {code:"IRC:58",title:"Design of Rigid Pavements",category:"Pavement",hasRef:false},
@@ -192,6 +205,43 @@
 
     /* ============ SHARED COMPONENTS ============ */
     function DevCredit(){return React.createElement("div",{className:"dev-credit",style:{marginTop:"12px",borderTop:"1px solid #E2E8F0",paddingTop:"10px"}},"Developed by Col Ashish Bhardwaj | Border Roads Organisation")}
+
+    /* Ver63: Guideline-load status banner */
+    function GuidelineLoadStatus(props){
+      var status=props.status;var loaded=props.loaded||[];var failed=props.failed||[];
+      if(status==="loading"){
+        return(<div style={{backgroundColor:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:"12px",padding:"12px 16px",marginBottom:"16px",fontSize:"13px",color:"#1E3A8A",display:"flex",alignItems:"center",gap:"10px"}}>
+          <span style={{fontSize:"16px"}}>{"⏳"}</span>
+          <span>Loading IRC reference guidelines from repository...</span>
+        </div>);
+      }
+      if(status==="error"){
+        return(<div style={{backgroundColor:"#FEF2F2",border:"2px solid #FCA5A5",borderRadius:"12px",padding:"14px 18px",marginBottom:"16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px"}}>
+            <span style={{fontSize:"18px"}}>{"\u{1F6D1}"}</span>
+            <strong style={{fontSize:"14px",color:"#991B1B"}}>Analysis blocked — guideline files failed to load</strong>
+          </div>
+          <div style={{fontSize:"12px",color:"#7F1D1D",marginBottom:"8px"}}>The following IRC reference document(s) could not be fetched. Analysis cannot start until every guideline loads successfully.</div>
+          <div style={{backgroundColor:"#fff",border:"1px solid #FECACA",borderRadius:"8px",padding:"8px 12px",marginBottom:"10px"}}>
+            {failed.map(function(f){return <div key={f.file} style={{fontSize:"12px",fontFamily:"monospace",color:"#7F1D1D",padding:"2px 0"}}>{"• "+f.label+" — "+f.file+" ("+f.reason+")"}</div>})}
+          </div>
+          {loaded.length>0&&<div style={{fontSize:"11px",color:"#64748B",marginBottom:"8px"}}>{loaded.length+" file"+(loaded.length!==1?"s":"")+" did load: "+loaded.map(function(l){return l.label}).join(", ")}</div>}
+          <button onClick={props.onRetry} style={{padding:"8px 16px",borderRadius:"8px",border:"none",background:"linear-gradient(135deg,#DC2626,#B91C1C)",color:"#fff",fontSize:"13px",fontWeight:700,cursor:"pointer"}}>{"↻ Retry loading guidelines"}</button>
+        </div>);
+      }
+      if(status==="ok"){
+        return(<div style={{backgroundColor:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:"12px",padding:"12px 16px",marginBottom:"16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"6px"}}>
+            <span style={{fontSize:"16px"}}>{"✅"}</span>
+            <strong style={{fontSize:"13px",color:"#166534"}}>{"All "+loaded.length+" guideline document"+(loaded.length!==1?"s":"")+" loaded successfully"}</strong>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+            {loaded.map(function(l){return <span key={l.file} title={l.file+" — "+l.bytes+" chars"} style={{fontSize:"11px",fontFamily:"monospace",backgroundColor:"#fff",border:"1px solid #BBF7D0",borderRadius:"4px",padding:"2px 8px",color:"#15803D",fontWeight:600}}>{l.label+" ("+l.version+")"}</span>})}
+          </div>
+        </div>);
+      }
+      return null;
+    }
 
     function StepIndicator(props){
       return(
@@ -440,6 +490,14 @@
           </div>
           {filtered.length===0?<div style={{textAlign:"center",padding:"40px",color:"#94A3B8",backgroundColor:"#fff",borderRadius:"14px"}}>No issues for this filter.</div>:filtered.map(function(d,i){return <DeficiencyCard key={i} item={d} index={i}/>})}
           <p className="no-print" style={{textAlign:"center",fontSize:"12px",color:"#94A3B8",marginTop:"16px"}}>{"\u{1F446} Click any deficiency to expand details and recommendations"}</p>
+          {results.loadedGuidelines&&results.loadedGuidelines.length>0&&(
+            <div style={{marginTop:"20px",padding:"14px 18px",backgroundColor:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:"10px"}}>
+              <div style={{fontSize:"11px",fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:.5,marginBottom:"6px"}}>Guideline versions referenced</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                {results.loadedGuidelines.map(function(l){return <span key={l.file} style={{fontSize:"11px",fontFamily:"monospace",backgroundColor:"#fff",border:"1px solid #CBD5E1",borderRadius:"4px",padding:"2px 8px",color:"#0F172A",fontWeight:600}}>{l.label+" ("+l.version+")"}</span>})}
+              </div>
+            </div>
+          )}
           <DevCredit/>
         </div>
       );
@@ -472,6 +530,7 @@
       var s21=useState([]),glFailedList=s21[0],setGlFailedList=s21[1];
       var apiKeyRef=useRef("");
       var msgIdx=useRef(0);
+      var ircCacheRef=useRef({}); /* Ver63: file -> text */
 
       /* Fetch API key from serverless function on mount */
       React.useEffect(function(){
@@ -484,6 +543,31 @@
         .catch(function(){setApiStatus("error")});
       },[]);
 
+      /* Ver63: Preflight load of IRC reference files on mount */
+      function loadGuidelines(){
+        setGlStatus("loading");setGlLoaded([]);setGlFailedList([]);
+        var loaded=[];var failed=[];
+        Promise.all(IRC_REF_FILES.map(function(entry){
+          return fetch(GITHUB_BASE_URL+entry.file).then(function(r){
+            if(!r.ok)throw new Error("HTTP "+r.status);
+            return r.text().then(function(t){
+              ircCacheRef.current[entry.file]=t;
+              loaded.push({file:entry.file,label:entry.label,version:entry.version,bytes:t.length});
+            });
+          }).catch(function(e){
+            failed.push({file:entry.file,label:entry.label,reason:e.message||"network error"});
+          });
+        })).then(function(){
+          /* keep ordering stable for display */
+          var orderIndex={};IRC_REF_FILES.forEach(function(x,i){orderIndex[x.file]=i});
+          loaded.sort(function(a,b){return orderIndex[a.file]-orderIndex[b.file]});
+          failed.sort(function(a,b){return orderIndex[a.file]-orderIndex[b.file]});
+          setGlLoaded(loaded);setGlFailedList(failed);
+          setGlStatus(failed.length===0?"ok":"error");
+        });
+      }
+      React.useEffect(function(){loadGuidelines()},[]);
+
       function toggleGL(code){setSelGL(function(p){return p.indexOf(code)!==-1?p.filter(function(x){return x!==code}):p.concat([code])})}
       function selectAllGL(){setSelGL(function(p){return p.length===STANDARD_GUIDELINES.length?[]:STANDARD_GUIDELINES.map(function(g){return g.code})})}
       function addGFiles(a){setGFiles(function(p){return p.concat(a)})}
@@ -494,37 +578,17 @@
       async function analyze(){
         if(dFiles.length===0){setError("Please upload at least one DPR document.");return}
         if(selGL.length===0&&gFiles.length===0){setError("Please select at least one guideline.");return}
+        if(glStatus!=="ok"){setError("Cannot start analysis — one or more IRC reference files failed to load. Use the red banner to retry.");return}
         setLoading(true);setError("");setStep(3);setProgress("Preparing documents...");setPct(5);msgIdx.current=0;
         try{
           var blocks=[];var tot=gFiles.length+dFiles.length;var done=0;
 
-/* Auto-fetch IRC guideline files from GitHub */
-var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver63/main/guidelines/";
-var IRC_FILES=["IRC_37_2018_Extracted.md","IRC_52_2019_Extraction.md","IRC_SP19_DPR_Analyzer_Extraction.md","IRC_SP48_2023_DPR_Analyzer_Extraction.md","MoRTH_DPR_Reference_Extract.md","IRC_73_1980_Extraction.md","IRC_SP13_DPR_Analyzer_Extraction.md","IRC_SP42_2014_DPR_Analyzer_Extraction.md"];
-setProgress("Loading IRC reference codes...");setPct(3);
-var failedFiles=[];
-for(var fi=0;fi<IRC_FILES.length;fi++){
-  try{
-    setProgress("Loading "+IRC_FILES[fi].replace(/_/g," ").replace(".md","")+"...");
-    var ircResp=await fetch(GITHUB_BASE+IRC_FILES[fi]);
-    if(ircResp.ok){
-      var ircText=await ircResp.text();
-      blocks.push({type:"text",text:"[IRC REFERENCE: "+IRC_FILES[fi]+"]\n"+ircText});
-      console.log("[DPR Analyzer] Loaded: "+IRC_FILES[fi]+" ("+ircText.length+" chars)");
-    }else{
-      console.error("[DPR Analyzer] HTTP "+ircResp.status+" loading "+IRC_FILES[fi]);
-      failedFiles.push(IRC_FILES[fi]+" (HTTP "+ircResp.status+")");
-    }
-  }catch(e){
-    console.error("[DPR Analyzer] Network error loading "+IRC_FILES[fi]+": "+e.message);
-    failedFiles.push(IRC_FILES[fi]+" (network error)");
-  }
-}
-if(failedFiles.length>0){
-  setGlFetchFailed(failedFiles);
-  throw new Error("Could not load "+failedFiles.length+" IRC reference file"+(failedFiles.length>1?"s":"")+":\n• "+failedFiles.join("\n• ")+"\n\nAnalysis blocked — reference files must load to ensure accurate compliance checking. Check your network connection and retry.");
-}
-setGlFetchFailed([]);
+          /* Ver63: IRC references already preloaded in ircCacheRef */
+          setProgress("Attaching IRC reference codes...");setPct(8);
+          IRC_REF_FILES.forEach(function(entry){
+            var txt=ircCacheRef.current[entry.file];
+            if(txt){blocks.push({type:"text",text:"[IRC REFERENCE: "+entry.file+"]\n"+txt})}
+          });
           for(var gi=0;gi<gFiles.length;gi++){
             setProgress("Reading: "+gFiles[gi].name+"...");setPct(5+(done/tot)*40);
             var gr=await processFile(gFiles[gi]);if(Array.isArray(gr))gr.forEach(function(x){blocks.push(x)});else blocks.push(gr);done++;
@@ -691,6 +755,7 @@ setGlFetchFailed([]);
                     {"\u26A0\uFE0F Analysis engine is not configured. Please contact the administrator to set up the environment variable."}
                   </div>
                 )}
+                <GuidelineLoadStatus status={glStatus} loaded={glLoaded} failed={glFailedList} onRetry={loadGuidelines}/>
                 <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
                   <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"16px"}}>
                     <span style={{fontSize:"20px"}}>{"\u{1F4CB}"}</span>
@@ -702,7 +767,7 @@ setGlFetchFailed([]);
                     <FileUploadZone label="Upload Custom Guidelines (Optional)" description="Your own regulation documents" files={gFiles} onAddFiles={addGFiles} onRemoveFile={removeGFile} icon={"\u{1F4E4}"}/>
                   </div>
                 </div>
-                <button onClick={function(){if(canStep0){setError("");setStep(2)}else setError("Select at least one guideline.")}} style={{width:"100%",padding:"16px",borderRadius:"12px",border:"none",background:canStep0?"linear-gradient(135deg,#0D9488,#0F766E)":"#CBD5E1",color:"#fff",fontSize:"16px",fontWeight:700,cursor:canStep0?"pointer":"not-allowed"}}>{"Next \u2192 Upload Your DPR"}</button>
+                <button onClick={function(){if(glStatus!=="ok"){setError("Guidelines have not finished loading \u2014 see banner above.");return}if(canStep0){setError("");setStep(2)}else setError("Select at least one guideline.")}} disabled={glStatus!=="ok"} style={{width:"100%",padding:"16px",borderRadius:"12px",border:"none",background:(canStep0&&glStatus==="ok")?"linear-gradient(135deg,#0D9488,#0F766E)":"#CBD5E1",color:"#fff",fontSize:"16px",fontWeight:700,cursor:(canStep0&&glStatus==="ok")?"pointer":"not-allowed"}}>{glStatus==="loading"?"Loading guidelines...":glStatus==="error"?"Blocked \u2014 guideline files failed":"Next \u2192 Upload Your DPR"}</button>
                 <DevCredit/>
               </div>
             )}
@@ -710,6 +775,7 @@ setGlFetchFailed([]);
             {/* STEP 2: Upload DPR */}
             {step===2&&(
               <div style={{animation:"fadeIn 0.3s ease"}}>
+                <GuidelineLoadStatus status={glStatus} loaded={glLoaded} failed={glFailedList} onRetry={loadGuidelines}/>
                 <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
                   <FileUploadZone label="Upload Your DPR Document(s)" description="The DPR you want to analyze" files={dFiles} onAddFiles={addDFiles} onRemoveFile={removeDFile} icon={"\u{1F4D1}"}/>
                   <div style={{backgroundColor:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:"10px",padding:"12px 16px",marginTop:"8px"}}>
@@ -748,7 +814,7 @@ setGlFetchFailed([]);
                 </div>
                 <div style={{display:"flex",gap:"12px"}}>
                   <button onClick={function(){setStep(0)}} style={{padding:"14px 24px",borderRadius:"12px",border:"1.5px solid #E2E8F0",backgroundColor:"#fff",color:"#64748B",fontSize:"14px",fontWeight:600,cursor:"pointer"}}>{"\u2190 Back"}</button>
-                  <button onClick={function(){if(canStep2){setError("");analyze()}else setError("Upload at least one DPR document.")}} style={{flex:1,padding:"16px",borderRadius:"12px",border:"none",background:canStep2?"linear-gradient(135deg,#0D9488,#0F766E)":"#CBD5E1",color:"#fff",fontSize:"16px",fontWeight:700,cursor:canStep2?"pointer":"not-allowed"}}>{"\u{1F50D} Analyze DPR Now"}</button>
+                  <button onClick={function(){if(glStatus!=="ok"){setError("Guidelines failed to load — analysis is blocked. Return to the previous step to retry.");return}if(canStep2){setError("");analyze()}else setError("Upload at least one DPR document.")}} disabled={glStatus!=="ok"} style={{flex:1,padding:"16px",borderRadius:"12px",border:"none",background:(canStep2&&glStatus==="ok")?"linear-gradient(135deg,#0D9488,#0F766E)":"#CBD5E1",color:"#fff",fontSize:"16px",fontWeight:700,cursor:(canStep2&&glStatus==="ok")?"pointer":"not-allowed"}}>{glStatus==="error"?"Blocked — guideline files failed":"\u{1F50D} Analyze DPR Now"}</button>
                 </div>
                 <DevCredit/>
               </div>
