@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPR Analyzer Pro - Border Roads Organisation</title>
+  <link rel="icon" href="https://bro.gov.in/sites/default/files/bro-logo.png">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Outfit',sans-serif;background:#F5F7FA;min-height:100vh}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    @keyframes dotGlow{0%,100%{box-shadow:0 0 4px rgba(34,197,94,0.4)}50%{box-shadow:0 0 12px rgba(34,197,94,0.8)}}
+    ::selection{background:#0D9488;color:#fff}
+    input:focus,textarea:focus{border-color:#0D9488!important;box-shadow:0 0 0 3px rgba(13,148,136,.1)!important}
+    button{font-family:'Outfit',sans-serif}
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}
+    .dev-credit{text-align:center;font-size:11px;color:#94A3B8;padding:8px 0;letter-spacing:.3px}
+    @media print{
+      .no-print{display:none!important}
+      body{background:#fff!important}
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    var useState = React.useState;
+    var useRef = React.useRef;
+
+    /* ============ CONFIGURATION ============ */
+    var BRO_LOGO = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Border_Roads_Organisation_Logo.png/150px-Border_Roads_Organisation_Logo.png";
+    var MAX_CHARS_PER_FILE = 150000;
+    var ACCEPT_STRING = ".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv,.md";
+    var SITE_PASSWORD = "BRO@DPR2026";
+
+    /* Analysis progress messages - NO mention of any AI/backend */
+    var PROGRESS_MSGS = [
+      "Parsing document structure...",
+      "Cross-referencing against IRC:37 - Flexible Pavement Design...",
+      "Checking compliance with IRC:73 - Geometric Design Standards...",
+      "Verifying MoRTH 5th Revision specifications...",
+      "Analyzing pavement design parameters and CBR values...",
+      "Checking drainage design against IRC:SP:42...",
+      "Reviewing bridge/culvert design per IRC:6 and IRC:112...",
+      "Verifying traffic survey data per IRC:SP:19...",
+      "Checking road safety provisions per IRC:SP:55...",
+      "Examining BOQ rates and cost estimation...",
+      "Validating environmental clearances and NOCs...",
+      "Cross-checking geometric alignment parameters...",
+      "Reviewing material specifications compliance...",
+      "Analyzing structural design calculations...",
+      "Compiling deficiency report..."
+    ];
+
+    var SEVERITY_CONFIG = {
+      critical:{bg:"#FEE2E2",border:"#DC2626",text:"#991B1B",badge:"#DC2626",emoji:"\u{1F534}",label:"Critical"},
+      major:{bg:"#FEF3C7",border:"#D97706",text:"#92400E",badge:"#D97706",emoji:"\u{1F7E1}",label:"Major"},
+      minor:{bg:"#DBEAFE",border:"#2563EB",text:"#1E40AF",badge:"#2563EB",emoji:"\u{1F535}",label:"Minor"},
+      observation:{bg:"#F3F4F6",border:"#6B7280",text:"#374151",badge:"#6B7280",emoji:"\u26AA",label:"Info"}
+    };
+    var CATEGORY_CONFIG = {
+      Design:{emoji:"\u{1F4D0}",color:"#7C3AED"},Pavement:{emoji:"\u{1F6E3}\uFE0F",color:"#2563EB"},
+      Drainage:{emoji:"\u{1F30A}",color:"#0891B2"},Safety:{emoji:"\u26A0\uFE0F",color:"#DC2626"},
+      Cost:{emoji:"\u{1F4B0}",color:"#D97706"},Survey:{emoji:"\u{1F4CF}",color:"#059669"},
+      Structural:{emoji:"\u{1F3D7}\uFE0F",color:"#9333EA"},Environmental:{emoji:"\u{1F33F}",color:"#16A34A"},
+      Land:{emoji:"\u{1F4CD}",color:"#EA580C"},Utilities:{emoji:"\u26A1",color:"#CA8A04"},
+      Schedule:{emoji:"\u{1F4C5}",color:"#4F46E5"},Quality:{emoji:"\u2705",color:"#0D9488"},
+      Documentation:{emoji:"\u{1F4C4}",color:"#64748B"}
+    };
+    var RISK_CONFIG = {
+      Low:{color:"#16A34A",bg:"#F0FDF4",border:"#BBF7D0"},
+      Moderate:{color:"#D97706",bg:"#FFFBEB",border:"#FDE68A"},
+      High:{color:"#DC2626",bg:"#FEF2F2",border:"#FECACA"},
+      Severe:{color:"#7F1D1D",bg:"#FEE2E2",border:"#FCA5A5"}
+    };
+    var STANDARD_GUIDELINES = [
+      {code:"IRC:37",title:"Design of Flexible Pavements",category:"Pavement"},
+      {code:"IRC:58",title:"Design of Rigid Pavements",category:"Pavement"},
+      {code:"IRC:SP:19",title:"Survey, Investigation & Preparation of Road Projects",category:"Survey"},
+      {code:"IRC:SP:84",title:"Specifications & Standards for Expressways",category:"Design"},
+      {code:"IRC:73",title:"Geometric Design Standards for Rural Highways",category:"Design"},
+      {code:"IRC:86",title:"Geometric Design Standards for Urban Roads",category:"Design"},
+      {code:"IRC:6",title:"Road Bridges - Loads & Stresses",category:"Bridge"},
+      {code:"IRC:112",title:"Code of Practice for Concrete Road Bridges",category:"Bridge"},
+      {code:"IRC:SP:13",title:"Guidelines for Design of Small Bridges & Culverts",category:"Bridge"},
+      {code:"MoRTH 5th Rev",title:"Specifications for Road & Bridge Works",category:"General"},
+      {code:"IRC:SP:42",title:"Road Drainage Guidelines",category:"Drainage"},
+      {code:"IRC:SP:55",title:"Road Safety Audit Guidelines",category:"Safety"},
+      {code:"BR Regulations",title:"Building & Road Regulations",category:"General"},
+      {code:"IS:1893",title:"Criteria for Earthquake Resistant Design",category:"Design"}
+    ];
+
+    /* ============ SESSION HELPERS ============ */
+    function getSession(){try{return window.sessionStorage.getItem("dpr_auth")==="1"}catch(e){return false}}
+    function setSession(){try{window.sessionStorage.setItem("dpr_auth","1")}catch(e){}}
+
+    /* ============ FILE HELPERS ============ */
+    function formatFileSize(bytes){
+      if(bytes<1024) return bytes+" B";
+      if(bytes<1048576) return (bytes/1024).toFixed(1)+" KB";
+      return (bytes/1048576).toFixed(1)+" MB";
+    }
+    function getFileTypeLabel(file){
+      var n=file.name.toLowerCase();
+      if(n.endsWith(".xlsx")||n.endsWith(".xls")) return "\u{1F4CA} Excel";
+      if(n.endsWith(".csv")) return "\u{1F4CA} CSV";
+      if(n.endsWith(".pdf")) return "\u{1F4D5} PDF";
+      if(n.endsWith(".doc")||n.endsWith(".docx")) return "\u{1F4D8} Word";
+      if(n.endsWith(".txt")) return "\u{1F4C4} Text";
+      return "\u{1F4CE} File";
+    }
+    function readFileAsBase64(file){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result.split(",")[1])};r.onerror=function(){rej(new Error("Read failed"))};r.readAsDataURL(file)})}
+    function readFileAsText(file){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result)};r.onerror=function(){rej(new Error("Read failed"))};r.readAsText(file)})}
+    function readExcelAsText(file){
+      return new Promise(function(resolve,reject){
+        var r=new FileReader();
+        r.onload=function(e){
+          try{
+            var data=new Uint8Array(e.target.result);
+            var wb=XLSX.read(data,{type:"array"});
+            var fullText="";var totalChars=0;
+            var maxPerSheet=Math.floor(MAX_CHARS_PER_FILE/Math.max(wb.SheetNames.length,1));
+            wb.SheetNames.forEach(function(sn){
+              if(totalChars>=MAX_CHARS_PER_FILE){fullText+="\n=== Sheet: "+sn+" === [SKIPPED]\n";return}
+              var sheet=wb.Sheets[sn];
+              var json=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+              var rows=json.filter(function(row){return row.some(function(c){return c!==""&&c!=null})});
+              var mc=0;rows.forEach(function(row){for(var c=row.length-1;c>=0;c--){if(row[c]!==""&&row[c]!=null){mc=Math.max(mc,c+1);break}}});
+              var tr=rows.map(function(row){return row.slice(0,mc).map(function(c){return c!=null?String(c).trim():""})});
+              var st="\n=== Sheet: "+sn+" ("+tr.length+" rows x "+mc+" cols) ===\n";
+              if(tr.length>0) st+=tr[0].join(",")+"\n";
+              if(tr.length>600){
+                for(var i=1;i<Math.min(501,tr.length);i++) st+=tr[i].join(",")+"\n";
+                st+="\n...[rows omitted]...\n\n";
+                for(var j=Math.max(tr.length-50,501);j<tr.length;j++) st+=tr[j].join(",")+"\n";
+              }else{for(var k=1;k<tr.length;k++) st+=tr[k].join(",")+"\n"}
+              if(st.length>maxPerSheet) st=st.substring(0,maxPerSheet)+"\n[...truncated]\n";
+              fullText+=st;totalChars+=st.length;
+            });
+            resolve(fullText);
+          }catch(err){reject(new Error("Excel error: "+err.message))}
+        };
+        r.onerror=function(){reject(new Error("Read failed"))};r.readAsArrayBuffer(file);
+      });
+    }
+    function processFile(file){
+      var ext=file.name.split(".").pop().toLowerCase();
+      if(ext==="xlsx"||ext==="xls"||ext==="csv"){return readExcelAsText(file).then(function(t){return{type:"text",text:"[FILE: "+file.name+"]\n"+t}})}
+      if(ext==="pdf"){return readFileAsBase64(file).then(function(b){return[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b}},{type:"text",text:"[FILE: "+file.name+"]"}]})}
+      return readFileAsText(file).then(function(t){return{type:"text",text:"[FILE: "+file.name+"]\n"+t}});
+    }
+    function cleanJSON(raw){
+      var s=raw.replace(/```json|```/g,"").trim();
+      var m=s.match(/\{[\s\S]*\}/);if(!m) return null;s=m[0];
+      s=s.replace(/,\s*\]/g,"]").replace(/,\s*\}/g,"}");
+      s=s.replace(/[\x00-\x1F\x7F]/g,function(c){if(c==="\n"||c==="\r"||c==="\t") return " ";return ""});
+      s=s.replace(/\}\s*\{/g,"},{");s=s.replace(/,,+/g,",");return s;
+    }
+    function esc(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+
+    /* ============ PASSWORD GATE ============ */
+    function PasswordGate(props){
+      var ps=useState("");var pw=ps[0];var setPw=ps[1];
+      var es=useState("");var err=es[0];var setErr=es[1];
+      function check(){if(pw===SITE_PASSWORD){setSession();props.onPass()}else{setErr("Incorrect password. Access denied.")}}
+      function onKey(e){if(e.key==="Enter")check()}
+      return(
+        <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{backgroundColor:"#fff",borderRadius:20,padding:"40px 36px",maxWidth:420,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",textAlign:"center"}}>
+            <img src={BRO_LOGO} alt="BRO" style={{height:70,marginBottom:16,borderRadius:8}} onError={function(e){e.target.style.display="none"}}/>
+            <h1 style={{margin:"0 0 4px",fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:"#1a1a2e"}}>DPR Analyzer Pro</h1>
+            <p style={{margin:"0 0 4px",fontSize:12,color:"#64748B"}}>Border Roads Organisation</p>
+            <p style={{margin:"0 0 24px",fontSize:11,color:"#94A3B8"}}>Developed by Col Ashish Bhardwaj</p>
+            <div style={{backgroundColor:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:10,padding:"12px 16px",marginBottom:20,textAlign:"left"}}>
+              <p style={{margin:0,fontSize:12,color:"#9A3412",lineHeight:1.5}}>{"\u{1F512} This application is password protected. Authorized personnel only."}</p>
+            </div>
+            <input type="password" placeholder="Enter access password" value={pw} onChange={function(e){setPw(e.target.value);setErr("")}} onKeyDown={onKey}
+              style={{width:"100%",padding:"14px 18px",borderRadius:12,border:"2px solid #E2E8F0",fontSize:15,outline:"none",textAlign:"center",letterSpacing:2,boxSizing:"border-box",marginBottom:12}}/>
+            <button onClick={check} style={{width:"100%",padding:14,borderRadius:12,border:"none",background:"linear-gradient(135deg,#0D9488,#0F766E)",color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer"}}>{"Unlock \u{1F513}"}</button>
+            {err&&<p style={{margin:"12px 0 0",fontSize:13,color:"#DC2626",fontWeight:600}}>{err}</p>}
+          </div>
+        </div>
+      );
+    }
+
+    /* ============ SHARED COMPONENTS ============ */
+    function DevCredit(){return React.createElement("div",{className:"dev-credit",style:{marginTop:"12px",borderTop:"1px solid #E2E8F0",paddingTop:"10px"}},"Developed by Col Ashish Bhardwaj | Border Roads Organisation")}
+
+    function StepIndicator(props){
+      return(
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",margin:"20px 0 28px",padding:"0 10px"}}>
+          {props.steps.map(function(step,i){
+            return(<div key={i} style={{display:"flex",alignItems:"center"}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"6px"}}>
+                <div style={{width:"36px",height:"36px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",fontWeight:700,backgroundColor:i<props.currentStep?"#10B981":i===props.currentStep?"#1a1a2e":"#E2E8F0",color:i<=props.currentStep?"#fff":"#94A3B8",boxShadow:i===props.currentStep?"0 0 0 4px rgba(26,26,46,0.15)":"none"}}>{i<props.currentStep?"\u2713":step.emoji}</div>
+                <span style={{fontSize:"11px",fontWeight:i===props.currentStep?700:500,color:i<=props.currentStep?"#1a1a2e":"#94A3B8",textAlign:"center",maxWidth:"70px"}}>{step.label}</span>
+              </div>
+              {i<props.steps.length-1&&<div style={{width:"40px",height:"2px",margin:"0 4px",backgroundColor:i<props.currentStep?"#10B981":"#E2E8F0",marginBottom:"22px"}}/>}
+            </div>);
+          })}
+        </div>
+      );
+    }
+
+    function FileUploadZone(props){
+      var inputRef=useRef(null);
+      var ds=useState(false),dragOver=ds[0],setDragOver=ds[1];
+      function openPicker(e){e.stopPropagation();if(inputRef.current){inputRef.current.value="";inputRef.current.click()}}
+      function onInput(e){var fl=e.target.files;if(fl&&fl.length>0){var a=[];for(var i=0;i<fl.length;i++)a.push(fl[i]);props.onAddFiles(a)}if(inputRef.current)inputRef.current.value=""}
+      function onDrop(e){e.preventDefault();e.stopPropagation();setDragOver(false);var fl=e.dataTransfer.files;if(fl&&fl.length>0){var a=[];for(var i=0;i<fl.length;i++)a.push(fl[i]);props.onAddFiles(a)}}
+      return(
+        <div style={{marginBottom:"16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px"}}>
+            <span style={{fontSize:"22px"}}>{props.icon}</span>
+            <div style={{flex:1}}><h3 style={{margin:0,fontSize:"16px",fontWeight:700,color:"#1a1a2e"}}>{props.label}</h3><p style={{margin:0,fontSize:"13px",color:"#64748B"}}>{props.description}</p></div>
+          </div>
+          <input ref={inputRef} type="file" multiple accept={ACCEPT_STRING} onChange={onInput} style={{display:"none"}}/>
+          <div onDragOver={function(e){e.preventDefault();setDragOver(true)}} onDragLeave={function(){setDragOver(false)}} onDrop={onDrop} onClick={openPicker}
+            style={{border:"2px dashed "+(dragOver?"#0D9488":"#CBD5E1"),borderRadius:"14px",padding:props.files.length>0?"20px":"36px 20px",textAlign:"center",cursor:"pointer",backgroundColor:dragOver?"#F0FDFA":"#FAFBFC"}}>
+            {props.files.length===0?(
+              <div><div style={{fontSize:"40px",marginBottom:"10px",opacity:.5}}>{"\u{1F4C2}"}</div>
+              <p style={{margin:0,fontSize:"15px",color:"#475569"}}><span style={{color:"#0D9488",fontWeight:700}}>Click to browse</span> or drag & drop</p>
+              <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:"6px",marginTop:"12px"}}>
+                {["PDF","Excel","CSV","Word","Text"].map(function(f){return <span key={f} style={{padding:"3px 10px",borderRadius:"6px",fontSize:"11px",backgroundColor:"#F1F5F9",color:"#64748B"}}>{f}</span>})}
+              </div></div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                {props.files.map(function(f,i){
+                  return(<div key={f.name+"_"+i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",backgroundColor:"#fff",borderRadius:"10px",border:"1px solid #E2E8F0",textAlign:"left"}}>
+                    <div style={{overflow:"hidden",flex:1}}>
+                      <div style={{fontSize:"13px",fontWeight:600,color:"#334155",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
+                      <div style={{fontSize:"11px",color:"#94A3B8"}}>{getFileTypeLabel(f).split(" ").slice(1).join(" ")+" \u00B7 "+formatFileSize(f.size)}</div>
+                    </div>
+                    <button onClick={function(e){e.preventDefault();e.stopPropagation();props.onRemoveFile(i)}} style={{background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",color:"#EF4444",fontSize:"13px",padding:"4px 10px",borderRadius:"6px",fontWeight:600,marginLeft:"10px"}}>Remove</button>
+                  </div>);
+                })}
+                <div style={{fontSize:"13px",color:"#0D9488",fontWeight:600,marginTop:"4px"}}>+ Click to add more</div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function GuidelineSelector(props){
+      var cats=[];var seen={};STANDARD_GUIDELINES.forEach(function(g){if(!seen[g.category]){seen[g.category]=true;cats.push(g.category)}});
+      return(<div>{cats.map(function(cat){
+        return(<div key={cat} style={{marginBottom:"14px"}}>
+          <div style={{fontSize:"12px",fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:"8px"}}>{cat}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+            {STANDARD_GUIDELINES.filter(function(g){return g.category===cat}).map(function(g){
+              var on=props.selected.indexOf(g.code)!==-1;
+              return <button key={g.code} onClick={function(){props.onToggle(g.code)}} style={{padding:"7px 14px",borderRadius:"8px",fontSize:"12px",border:on?"2px solid #0D9488":"1.5px solid #E2E8F0",backgroundColor:on?"#F0FDFA":"#fff",color:on?"#0D9488":"#475569",cursor:"pointer",fontWeight:600}}>{on?"\u2713 ":""}<strong>{g.code}</strong><span style={{fontWeight:400,opacity:.7,marginLeft:"4px",fontSize:"11px"}}>{" \u2014 "+g.title}</span></button>;
+            })}
+          </div>
+        </div>);
+      })}</div>);
+    }
+
+    function SeverityBadge(props){var c=SEVERITY_CONFIG[props.severity]||SEVERITY_CONFIG.observation;return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px",borderRadius:"20px",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",backgroundColor:c.badge,color:"#fff"}}>{c.emoji+" "+c.label}</span>}
+
+    function DeficiencyCard(props){
+      var item=props.item;var index=props.index;
+      var es=useState(false);var expanded=es[0];var setExpanded=es[1];
+      var c=SEVERITY_CONFIG[item.severity]||SEVERITY_CONFIG.observation;
+      var catCfg=CATEGORY_CONFIG[item.category]||{emoji:"\u{1F4CB}",color:"#64748B"};
+      return(
+        <div style={{borderLeft:"4px solid "+c.border,borderRadius:"12px",backgroundColor:"#fff",marginBottom:"10px",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid "+c.border+"20",borderLeftWidth:"4px",borderLeftColor:c.border}}>
+          <div onClick={function(){setExpanded(!expanded)}} style={{padding:"14px 18px",cursor:"pointer",display:"flex",alignItems:"flex-start",gap:"12px"}}>
+            <span style={{fontFamily:"monospace",fontSize:"12px",color:"#94A3B8",fontWeight:700,minWidth:"30px",paddingTop:"3px"}}>{"#"+String(index+1).padStart(2,"0")}</span>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap",marginBottom:"5px"}}>
+                <SeverityBadge severity={item.severity}/>
+                {item.category&&<span style={{fontSize:"11px",color:catCfg.color,fontWeight:600,backgroundColor:catCfg.color+"12",padding:"3px 8px",borderRadius:"4px"}}>{catCfg.emoji+" "+item.category}</span>}
+                {item.clause&&<span style={{fontSize:"11px",color:"#475569",fontFamily:"monospace",backgroundColor:"#F1F5F9",padding:"3px 8px",borderRadius:"4px",fontWeight:600}}>{item.clause}</span>}
+              </div>
+              <h4 style={{margin:"4px 0 0",fontSize:"14px",fontWeight:600,color:"#1E293B",lineHeight:1.4}}>{item.title}</h4>
+              {item.location&&<div style={{fontSize:"11px",color:"#94A3B8",marginTop:"3px"}}>{"\u{1F4CD} "+item.location}</div>}
+            </div>
+            <span className="no-print" style={{fontSize:"20px",color:"#CBD5E1",transform:expanded?"rotate(180deg)":"rotate(0)",flexShrink:0,marginTop:"2px"}}>{"\u25BE"}</span>
+          </div>
+          {expanded&&(
+            <div style={{padding:"0 18px 16px 60px",fontSize:"13px",lineHeight:1.8,color:"#475569",borderTop:"1px solid #F1F5F9"}}>
+              {item.description&&<p style={{margin:"12px 0 0"}}>{item.description}</p>}
+              {item.impact&&(<div style={{backgroundColor:"#FEF2F2",border:"1px solid #FECACA",borderRadius:"10px",padding:"12px 16px",marginTop:"12px"}}><div style={{fontSize:"12px",fontWeight:700,color:"#991B1B",marginBottom:"4px"}}>{"\u26A1 Impact if Not Corrected"}</div><p style={{margin:0,color:"#DC2626",fontSize:"13px"}}>{item.impact}</p></div>)}
+              {item.recommendation&&(<div style={{backgroundColor:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:"10px",padding:"12px 16px",marginTop:"12px"}}><div style={{fontSize:"12px",fontWeight:700,color:"#166534",marginBottom:"4px"}}>{"\u{1F4A1} Recommendation"}</div><p style={{margin:0,color:"#15803D",fontSize:"13px"}}>{item.recommendation}</p></div>)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ============ RESULTS DASHBOARD ============ */
+    function ResultsDashboard(props){
+      var results=props.results;
+      var s1=useState("all"),filterSev=s1[0],setFilterSev=s1[1];
+      var s2=useState("all"),filterCat=s2[0],setFilterCat=s2[1];
+      if(!results) return null;
+      var defs=results.deficiencies||[];
+      var counts={};["critical","major","minor","observation"].forEach(function(k){counts[k]=defs.filter(function(d){return d.severity===k}).length});
+      var total=defs.length;
+      var cs={},cats=[];defs.forEach(function(d){if(d.category&&!cs[d.category]){cs[d.category]=true;cats.push(d.category)}});
+      var filtered=defs.filter(function(d){if(filterSev!=="all"&&d.severity!==filterSev) return false;if(filterCat!=="all"&&d.category!==filterCat) return false;return true});
+      var riskCfg=RISK_CONFIG[results.riskLevel]||RISK_CONFIG.Moderate;
+
+      function handlePrint(){
+        var defs=results.deficiencies||[];
+        var counts={};["critical","major","minor","observation"].forEach(function(k){counts[k]=defs.filter(function(d){return d.severity===k}).length});
+        var total=defs.length;var now=new Date();
+        var dateStr=now.toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"});
+        var timeStr=now.toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit",hour12:true});
+        var sevColors={critical:{bg:"#DC2626",text:"#fff"},major:{bg:"#D97706",text:"#fff"},minor:{bg:"#2563EB",text:"#fff"},observation:{bg:"#6B7280",text:"#fff"}};
+        var sevLabels={critical:"CRITICAL",major:"MAJOR",minor:"MINOR",observation:"INFO"};
+        var sevBorders={critical:"#DC2626",major:"#D97706",minor:"#2563EB",observation:"#6B7280"};
+        var scoreColor=(results.complianceScore>=70)?"#16A34A":(results.complianceScore>=40)?"#D97706":"#DC2626";
+        var findingsHtml="";
+        defs.forEach(function(d,i){
+          var sc=sevColors[d.severity]||sevColors.observation;var sl=sevLabels[d.severity]||"INFO";var sb=sevBorders[d.severity]||"#6B7280";
+          findingsHtml+="<div style='border-left:5px solid "+sb+";background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:18px 20px;margin-bottom:14px;page-break-inside:avoid'>";
+          findingsHtml+="<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap'>";
+          findingsHtml+="<span style='font-family:monospace;font-size:13px;font-weight:700;color:#64748B'>#"+String(i+1).padStart(2,"0")+"</"+"span>";
+          findingsHtml+="<span style='display:inline-block;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:"+sc.bg+";color:"+sc.text+";-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+sl+"</"+"span>";
+          if(d.category)findingsHtml+="<span style='font-size:11px;color:#475569;background:#F1F5F9;padding:3px 10px;border-radius:4px;font-weight:600'>"+esc(d.category)+"</"+"span>";
+          if(d.clause)findingsHtml+="<span style='font-size:11px;color:#475569;font-family:monospace;background:#F1F5F9;padding:3px 10px;border-radius:4px;font-weight:600'>"+esc(d.clause)+"</"+"span>";
+          findingsHtml+="</"+"div>";
+          findingsHtml+="<div style='font-size:14px;font-weight:700;color:#1E293B;margin-bottom:8px'>"+esc(d.title)+"</"+"div>";
+          if(d.location)findingsHtml+="<div style='margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>DPR Location:</"+"span> <span style='font-family:monospace;color:#0D9488;font-weight:600;font-size:12px'>"+esc(d.location)+"</"+"span></"+"div>";
+          if(d.description)findingsHtml+="<div style='margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>Description:</"+"span><div style='font-size:12px;color:#475569;line-height:1.7;margin-top:4px'>"+esc(d.description)+"</"+"div></"+"div>";
+          if(d.impact)findingsHtml+="<div style='background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#991B1B;text-transform:uppercase'>Impact if Not Corrected:</"+"span><div style='color:#DC2626;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.impact)+"</"+"div></"+"div>";
+          if(d.recommendation)findingsHtml+="<div style='background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:10px 14px;margin-bottom:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#166534;text-transform:uppercase'>Recommendation:</"+"span><div style='color:#15803D;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.recommendation)+"</"+"div></"+"div>";
+          findingsHtml+="</"+"div>";
+        });
+        var tableHtml="<table style='width:100%;border-collapse:collapse;table-layout:fixed;page-break-inside:auto'>";
+        tableHtml+="<thead style='display:table-header-group'><tr>";
+        var thS="background:#1a1a2e;color:#fff;padding:10px 6px;font-size:10px;border:1px solid #1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact";
+        tableHtml+="<th style='width:30px;text-align:center;"+thS+"'>#</"+"th><th style='width:70px;text-align:center;"+thS+"'>Severity</"+"th><th style='width:140px;"+thS+"'>Issue</"+"th><th style='width:80px;"+thS+"'>Category</"+"th><th style='width:90px;"+thS+"'>Clause</"+"th><th style='width:150px;"+thS+"'>DPR Location</"+"th><th style='"+thS+"'>Description</"+"th><th style='width:180px;"+thS+"'>Recommendation</"+"th>";
+        tableHtml+="</"+"tr></"+"thead><tbody>";
+        defs.forEach(function(d,i){
+          var sc2=sevColors[d.severity]||sevColors.observation;var sl2=sevLabels[d.severity]||"INFO";var bg2=(i%2===1)?"background:#F8FAFC;":"";
+          tableHtml+="<tr style='page-break-inside:avoid'><td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;font-weight:700;color:#64748B;vertical-align:top;"+bg2+"'>"+(i+1)+"</"+"td>";
+          tableHtml+="<td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;vertical-align:top;"+bg2+"'><span style='display:inline-block;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;background:"+sc2.bg+";color:"+sc2.text+";-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+sl2+"</"+"span></"+"td>";
+          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-weight:600;color:#1E293B;font-size:11px;vertical-align:top;"+bg2+"'>"+esc(d.title)+"</"+"td>";
+          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;vertical-align:top;"+bg2+"'>"+esc(d.category)+"</"+"td>";
+          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;vertical-align:top;"+bg2+"'>"+esc(d.clause)+"</"+"td>";
+          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;font-family:monospace;color:#0D9488;font-weight:600;vertical-align:top;"+bg2+"'>"+esc(d.location)+"</"+"td>";
+          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;line-height:1.4;vertical-align:top;"+bg2+"'>"+esc(d.description)+"</"+"td>";
+          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#166534;line-height:1.4;vertical-align:top;background:#F0FDF4;-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+esc(d.recommendation)+"</"+"td></"+"tr>";
+        });
+        tableHtml+="</"+"tbody></"+"table>";
+        var h=[];
+        h.push("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>DPR Analysis Report<"+"/title>");
+        h.push("<style>@page{size:A3 landscape;margin:12mm}body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px;color:#1E293B;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}<"+"/style>");
+        h.push("<"+"/head><body>");
+        h.push("<div style='background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;padding:20px 30px;border-radius:8px;margin-bottom:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact'>");
+        h.push("<div style='display:flex;align-items:center;gap:16px'>");
+        h.push("<img src='"+BRO_LOGO+"' alt='BRO' style='height:55px;border-radius:6px;background:rgba(255,255,255,0.9);padding:3px' onerror='this.style.display=\"none\"'/>");
+        h.push("<div style='flex:1'><div style='font-size:11px;opacity:0.5;letter-spacing:1px;text-transform:uppercase'>Border Roads Organisation<"+"/div>");
+        h.push("<div style='font-size:24px;font-weight:800;margin-top:2px'>DPR Analysis Report<"+"/div>");
+        h.push("<div style='font-size:12px;opacity:0.5;margin-top:4px'>"+dateStr+" at "+timeStr+"<"+"/div><"+"/div>");
+        h.push("<div style='text-align:right;font-size:11px;line-height:1.6'><div style='opacity:0.4'>Developed by<"+"/div><div style='font-weight:700;font-size:13px;opacity:0.8'>Col Ashish Bhardwaj<"+"/div><"+"/div>");
+        h.push("<"+"/div><"+"/div>");
+        h.push("<div style='background:#fff;border:2px solid #E2E8F0;border-radius:8px;padding:20px 24px;margin-bottom:24px'>");
+        h.push("<div style='font-size:16px;font-weight:700;margin-bottom:10px;color:#1a1a2e'>Executive Summary<"+"/div>");
+        h.push("<p style='margin:0 0 16px;line-height:1.7;color:#475569;font-size:13px'>"+esc(results.summary)+"<"+"/p>");
+        h.push("<div style='display:flex;flex-wrap:wrap;gap:10px'>");
+        h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:26px;font-weight:800;color:"+scoreColor+"'>"+results.complianceScore+"%<"+"/div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>Compliance<"+"/div><"+"/span>");
+        if(results.riskLevel){var rc2=(results.riskLevel==="Severe"||results.riskLevel==="High")?"#DC2626":"#D97706";h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:20px;font-weight:800;color:"+rc2+"'>"+esc(results.riskLevel)+"<"+"/div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>Risk Level<"+"/div><"+"/span>")}
+        [{n:counts.critical,l:"Critical",c:"#DC2626"},{n:counts.major,l:"Major",c:"#D97706"},{n:counts.minor,l:"Minor",c:"#2563EB"},{n:counts.observation,l:"Info",c:"#6B7280"},{n:total,l:"Total",c:"#0D9488"}].forEach(function(si){h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:26px;font-weight:800;color:"+si.c+"'>"+si.n+"<"+"/div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>"+si.l+"<"+"/div><"+"/span>")});
+        h.push("<"+"/div><"+"/div>");
+        h.push("<div style='font-size:17px;font-weight:700;color:#1a1a2e;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #1a1a2e'>Part A: Quick Reference Table<"+"/div>");
+        h.push(tableHtml);
+        h.push("<div style='font-size:17px;font-weight:700;color:#1a1a2e;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #1a1a2e;page-break-before:always'>Part B: Detailed Findings and Recommendations<"+"/div>");
+        h.push("<p style='font-size:12px;color:#64748B;margin-bottom:16px;line-height:1.6'>Each finding includes the complete description, impact assessment, and specific actionable recommendations for DPR amendment.<"+"/p>");
+        h.push(findingsHtml);
+        h.push("<div style='text-align:center;font-size:10px;color:#64748B;margin-top:24px;padding-top:12px;border-top:2px solid #1a1a2e'>");
+        h.push("<strong>Generated by DPR Analyzer Pro<"+"/strong> | Border Roads Organisation | <strong>Developed by Col Ashish Bhardwaj<"+"/strong><br>");
+        h.push("<span style='font-size:9px;color:#94A3B8'>All findings should be verified by a qualified engineer.<"+"/span><"+"/div>");
+        h.push("<"+"/body><"+"/html>");
+        var w=window.open("","_blank");
+        if(w){w.document.write(h.join(""));w.document.close();setTimeout(function(){w.print()},500)}
+        else{alert("Please allow popups to print the report.")}
+      }
+
+      return(
+        <div>
+          <div style={{background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",borderRadius:"18px",padding:"28px",marginBottom:"24px",color:"#fff",position:"relative",overflow:"hidden"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px",flexWrap:"wrap",gap:"10px"}}>
+              <div><h2 style={{margin:"0 0 4px",fontFamily:"'Playfair Display',serif",fontSize:"24px",fontWeight:800}}>{"\u2705 Analysis Complete"}</h2><p style={{margin:0,fontSize:"13px",opacity:.6}}>{total+" issue"+(total!==1?"s":"")+" found"}</p></div>
+              <div style={{display:"flex",gap:"8px"}}>
+                <button onClick={handlePrint} style={{backgroundColor:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F5A8}\uFE0F Print Report"}</button>
+                <button onClick={props.onReset} style={{backgroundColor:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F504} New Analysis"}</button>
+              </div>
+            </div>
+            <p style={{margin:"0 0 20px",fontSize:"14px",opacity:.8,lineHeight:1.6}}>{results.summary}</p>
+            <div style={{display:"flex",gap:"12px",alignItems:"stretch",flexWrap:"wrap"}}>
+              {results.complianceScore!==undefined&&(<div style={{backgroundColor:"rgba(255,255,255,0.08)",borderRadius:"14px",padding:"16px 24px",textAlign:"center",minWidth:"100px"}}><div style={{fontSize:"40px",fontWeight:800,lineHeight:1,color:results.complianceScore>=70?"#34D399":results.complianceScore>=40?"#FBBF24":"#F87171"}}>{results.complianceScore+"%"}</div><div style={{fontSize:"11px",opacity:.6,marginTop:"6px"}}>Compliance</div></div>)}
+              {results.riskLevel&&(<div style={{backgroundColor:"rgba(255,255,255,0.08)",borderRadius:"14px",padding:"16px 24px",textAlign:"center",minWidth:"100px",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center"}}><div style={{fontSize:"16px",fontWeight:800,color:riskCfg.color,backgroundColor:riskCfg.bg,border:"1px solid "+riskCfg.border,padding:"8px 16px",borderRadius:"8px"}}>{results.riskLevel}</div><div style={{fontSize:"11px",opacity:.6,marginTop:"8px"}}>Risk Level</div></div>)}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",flex:1}}>
+                {Object.keys(SEVERITY_CONFIG).map(function(key){var cfg=SEVERITY_CONFIG[key];return <div key={key} onClick={function(){setFilterSev(filterSev===key?"all":key)}} style={{backgroundColor:filterSev===key?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",borderRadius:"10px",padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:"10px",border:filterSev===key?"1px solid rgba(255,255,255,0.3)":"1px solid transparent"}}><span style={{fontSize:"22px",fontWeight:800,color:cfg.badge}}>{counts[key]||0}</span><span style={{fontSize:"12px",opacity:.7}}>{cfg.emoji+" "+cfg.label}</span></div>})}
+              </div>
+            </div>
+          </div>
+          {cats.length>0&&(<div className="no-print" style={{marginBottom:"16px"}}><div style={{fontSize:"12px",fontWeight:700,color:"#94A3B8",textTransform:"uppercase",marginBottom:"8px"}}>Filter by Category</div><div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}><button onClick={function(){setFilterCat("all")}} style={{padding:"6px 12px",borderRadius:"8px",fontSize:"12px",fontWeight:600,border:filterCat==="all"?"2px solid #0D9488":"1.5px solid #E2E8F0",backgroundColor:filterCat==="all"?"#F0FDFA":"#fff",color:filterCat==="all"?"#0D9488":"#64748B",cursor:"pointer"}}>{"All ("+total+")"}</button>{cats.map(function(cat){var cc=CATEGORY_CONFIG[cat]||{emoji:"\u{1F4CB}",color:"#64748B"};var n=defs.filter(function(d){return d.category===cat}).length;return <button key={cat} onClick={function(){setFilterCat(filterCat===cat?"all":cat)}} style={{padding:"6px 12px",borderRadius:"8px",fontSize:"12px",fontWeight:600,border:filterCat===cat?"2px solid "+cc.color:"1.5px solid #E2E8F0",backgroundColor:filterCat===cat?cc.color+"10":"#fff",color:filterCat===cat?cc.color:"#64748B",cursor:"pointer"}}>{cc.emoji+" "+cat+" ("+n+")"}</button>})}</div></div>)}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
+            <h3 style={{margin:0,fontSize:"17px",fontWeight:700,color:"#1a1a2e"}}>{"Deficiencies ("+filtered.length+((filterSev!=="all"||filterCat!=="all")?" of "+total:"")+")"}</h3>
+            {(filterSev!=="all"||filterCat!=="all")&&<button className="no-print" onClick={function(){setFilterSev("all");setFilterCat("all")}} style={{fontSize:"12px",color:"#0D9488",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{"\u2715 Clear filters"}</button>}
+          </div>
+          {filtered.length===0?<div style={{textAlign:"center",padding:"40px",color:"#94A3B8",backgroundColor:"#fff",borderRadius:"14px"}}>No issues for this filter.</div>:filtered.map(function(d,i){return <DeficiencyCard key={i} item={d} index={i}/>})}
+          <p className="no-print" style={{textAlign:"center",fontSize:"12px",color:"#94A3B8",marginTop:"16px"}}>{"\u{1F446} Click any deficiency to expand details and recommendations"}</p>
+          <DevCredit/>
+        </div>
+      );
+    }
+
+    /* ============ MAIN APP ============ */
+    function DPRAnalyzer(){
+      var s0=useState(0),step=s0[0],setStep=s0[1];
+      var s3=useState([]),gFiles=s3[0],setGFiles=s3[1];
+      var s4=useState([]),dFiles=s4[0],setDFiles=s4[1];
+      var s5=useState(""),ctx=s5[0],setCtx=s5[1];
+      var s6=useState([]),selGL=s6[0],setSelGL=s6[1];
+      var s7=useState(null),results=s7[0],setResults=s7[1];
+      var s8=useState(false),loading=s8[0],setLoading=s8[1];
+      var s9=useState(""),error=s9[0],setError=s9[1];
+      var s10=useState(""),progress=s10[0],setProgress=s10[1];
+      var s11=useState(0),pct=s11[0],setPct=s11[1];
+      var s12=useState("checking"),apiStatus=s12[0],setApiStatus=s12[1];
+      var apiKeyRef=useRef("");
+      var msgIdx=useRef(0);
+
+      /* Fetch API key from serverless function on mount */
+      React.useEffect(function(){
+        fetch("/.netlify/functions/get-config",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
+        .then(function(r){return r.json()})
+        .then(function(d){
+          if(d.status==="ok"&&d.key){apiKeyRef.current=d.key;setApiStatus("ready")}
+          else{setApiStatus("error")}
+        })
+        .catch(function(){setApiStatus("error")});
+      },[]);
+
+      function toggleGL(code){setSelGL(function(p){return p.indexOf(code)!==-1?p.filter(function(x){return x!==code}):p.concat([code])})}
+      function selectAllGL(){setSelGL(function(p){return p.length===STANDARD_GUIDELINES.length?[]:STANDARD_GUIDELINES.map(function(g){return g.code})})}
+      function addGFiles(a){setGFiles(function(p){return p.concat(a)})}
+      function removeGFile(i){setGFiles(function(p){return p.filter(function(_,j){return j!==i})})}
+      function addDFiles(a){setDFiles(function(p){return p.concat(a)})}
+      function removeDFile(i){setDFiles(function(p){return p.filter(function(_,j){return j!==i})})}
+
+      async function analyze(){
+        if(dFiles.length===0){setError("Please upload at least one DPR document.");return}
+        if(selGL.length===0&&gFiles.length===0){setError("Please select at least one guideline.");return}
+        setLoading(true);setError("");setStep(3);setProgress("Preparing documents...");setPct(5);msgIdx.current=0;
+        try{
+          var blocks=[];var tot=gFiles.length+dFiles.length;var done=0;
+
+/* Auto-fetch IRC guideline files from GitHub */
+var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver60/main/guidelines/";
+var IRC_FILES=["IRC_37_2018_Extracted.md","IRC_52_2019_Extraction.md","IRC_SP19_DPR_Analyzer_Extraction.md","IRC_SP48_2023_DPR_Analyzer_Extraction.md","MoRTH_DPR_Reference_Extract.md","IRC_73_1980_Extraction.md","IRC_SP13_DPR_Analyzer_Extraction.md","IRC_SP42_2014_DPR_Analyzer_Extraction.md","IS_1893_Part1_2016_DPR_Reference.md"];
+setProgress("Loading IRC reference codes...");setPct(3);
+for(var fi=0;fi<IRC_FILES.length;fi++){
+  try{
+    var gr=await fetch(GITHUB_BASE+IRC_FILES[fi]);
+    if(gr.ok){
+      var gt2=await gr.text();
+      blocks.push({type:"text",text:"[IRC REFERENCE: "+IRC_FILES[fi]+"]\n"+gt2});
+    }
+  }catch(e){console.warn("Could not load "+IRC_FILES[fi])}
+}
+          for(var gi=0;gi<gFiles.length;gi++){
+            setProgress("Reading: "+gFiles[gi].name+"...");setPct(5+(done/tot)*40);
+            var gr=await processFile(gFiles[gi]);if(Array.isArray(gr))gr.forEach(function(x){blocks.push(x)});else blocks.push(gr);done++;
+          }
+          for(var di=0;di<dFiles.length;di++){
+            setProgress("Reading: "+dFiles[di].name+"...");setPct(5+(done/tot)*40);
+            var dr=await processFile(dFiles[di]);if(Array.isArray(dr))dr.forEach(function(x){blocks.push(x)});else blocks.push(dr);done++;
+          }
+          var gt="";
+          if(selGL.length>0){gt="\n\nStandard guidelines to check against:\n"+selGL.map(function(g){var info=STANDARD_GUIDELINES.find(function(sg){return sg.code===g});return"- "+g+": "+(info?info.title:"")}).join("\n")}
+          var ct=ctx.trim()?"\n\nAdditional context: "+ctx:"";
+          blocks.push({type:"text",text:"Analyze the DPR document(s) above against guidelines and regulatory requirements."+gt+ct+"\n\nPerform a professional DPR compliance audit specifically for a BRO hill/mountain road project. PRIORITY CODES FOR BRO: IRC:SP:48 (Hill Road Design — check hairpin bends, formation width, hill cutting, retaining walls, side drains), IRC:52 (Mountain Roads), IRC:73 (Geometric Design — gradients, curves, sight distance), IRC:SP:13 (Culverts and minor bridges), IRC:SP:42 (Drainage — especially cross drainage in hill terrain), IS:1893 (Seismic zone compliance). Check all of: traffic data, geometric design, pavement, drainage, safety, environmental, land acquisition, cost estimation, material specs, bridges/culverts, survey, drawings, utilities, schedule, quality plan.\n\nDo not hallucinate clause numbers. If unsure say \"Relevant IRC clause to be verified\".\n\nCRITICAL: Output ONLY valid JSON. No markdown. No backticks. No text before or after. No trailing commas. Ensure every array and object is properly closed.\n\nThe output report will be used as a working guideline for engineers to carry out amendments in the DPR. So provide DETAILED and SPECIFIC information in every field.\n\n{\"summary\":\"4-5 sentence overview of DPR quality, key gaps, and overall compliance assessment\",\"complianceScore\":<0-100>,\"riskLevel\":\"Low|Moderate|High|Severe\",\"deficiencies\":[{\"severity\":\"critical|major|minor|observation\",\"category\":\"Design|Pavement|Drainage|Safety|Cost|Survey|Structural|Environmental|Land|Utilities|Schedule|Quality|Documentation\",\"title\":\"Clear issue title\",\"clause\":\"Specific IRC/MoRTH clause reference\",\"location\":\"Exact DPR location - sheet name, section, page, table, row number, chainage etc.\",\"description\":\"Detailed technical explanation of what is wrong, what is missing, or what does not comply. Include specific values found vs required values where applicable. 2-3 sentences.\",\"impact\":\"Detailed consequence if this deficiency is not corrected - structural risk, cost overrun, safety hazard, project delay, regulatory rejection etc. 2-3 sentences.\",\"recommendation\":\"Step-by-step actionable fix with specific standards to follow, calculations to perform, data to collect, or sections to add. 2-3 sentences.\"}]}\n\nSeverity: critical=direct safety hazard or mandatory code violation with structural/safety consequence; major=significant technical flaw, wrong design methodology, missing mandatory calculation, incorrect design parameter; minor=incomplete data that affects technical review; observation=genuine improvement suggestion with engineering basis. Do NOT use minor or observation for formatting, typographical, or purely administrative gaps.\nProvide detailed content in description, impact, and recommendation fields (2-3 sentences each).\nMinimum 10 findings. Maximum 20. PRIORITY FOCUS: At least 60% of findings must be Critical or Major severity — specifically design parameters, geometric compliance, pavement calculations, structural adequacy, drainage hydraulics, and seismic provisions. Minor and Observation findings should only be raised where they have genuine engineering consequence. Do NOT raise minor documentation formatting issues unless they affect technical compliance."});
+
+          /* Start cycling progress messages - NO mention of any backend */
+          setProgress(PROGRESS_MSGS[0]);setPct(50);
+          var msgTimer=setInterval(function(){
+            msgIdx.current=(msgIdx.current+1)%PROGRESS_MSGS.length;
+            setProgress(PROGRESS_MSGS[msgIdx.current]);
+            setPct(function(prev){return Math.min(prev+2,85)});
+          },3000);
+
+          var body=JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:32000,
+            system:"You are a senior highway design auditor with 20+ years experience in IRC Codes, MoRTH Specifications (5th Revision), Bridge and Culvert Codes, Pavement Design, Geometric Design, Road Safety, Drainage, Seismic codes, Land Acquisition and Environmental norms. You perform professional DPR compliance audits for Indian Road/Highway projects. You are technically rigorous. You never hallucinate clause numbers.",
+            messages:[{role:"user",content:blocks}]
+          });
+
+          var response=null;var maxRetries=3;
+          for(var attempt=1;attempt<=maxRetries;attempt++){
+            response=await fetch("https://api.anthropic.com/v1/messages",{
+              method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKeyRef.current,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:body
+            });
+            if(response.status===429&&attempt<maxRetries){
+              var ws=Math.min(30*attempt,120);
+              for(var sec=ws;sec>0;sec--){
+                setProgress("Server busy. Retrying in "+sec+"s...");
+                await new Promise(function(r){setTimeout(r,1000)});
+              }
+              continue;
+            }
+            break;
+          }
+          clearInterval(msgTimer);setPct(88);
+          if(!response.ok){
+            var ed={};try{ed=await response.json()}catch(ex){}
+            var errMsg=ed.error&&ed.error.message?ed.error.message:(ed.error||"Analysis failed ("+response.status+")");
+            if(response.status===429)throw new Error("Service temporarily busy. Please try again in a few minutes.");
+            throw new Error(errMsg);
+          }
+          setProgress("Compiling deficiency report...");setPct(92);
+          var data=await response.json();
+          var txt=data.content.map(function(b){return b.type==="text"?b.text:""}).join("");
+          var parsed;var cleaned=cleanJSON(txt);
+          if(!cleaned)throw new Error("Analysis produced no results. Please try again.");
+          try{parsed=JSON.parse(cleaned)}catch(pe){
+            try{
+              var sm=cleaned.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+              var sc=cleaned.match(/"complianceScore"\s*:\s*(\d+)/);
+              var rl=cleaned.match(/"riskLevel"\s*:\s*"([^"]*)"/);
+              var di2=cleaned.indexOf('"deficiencies"');if(di2===-1)throw new Error("no deficiencies");
+              var as2=cleaned.indexOf("[",di2);var dep=0;var ae=-1;
+              for(var ci=as2;ci<cleaned.length;ci++){if(cleaned[ci]==="[")dep++;if(cleaned[ci]==="]")dep--;if(dep===0){ae=ci;break}}
+              if(ae===-1) ae=cleaned.lastIndexOf("]");
+              var arrStr=cleaned.substring(as2,ae+1).replace(/,\s*\]/g,"]").replace(/,\s*\}/g,"}").replace(/\}\s*\{/g,"},{");
+              parsed={summary:sm?sm[1].replace(/\\"/g,'"').replace(/\\n/g," "):"Analysis complete.",complianceScore:sc?parseInt(sc[1]):50,riskLevel:rl?rl[1]:"Moderate",deficiencies:JSON.parse(arrStr)};
+            }catch(pe2){throw new Error("Analysis report parsing failed. Please try again.")}
+          }
+          if(parsed.deficiencies){
+            parsed.deficiencies=parsed.deficiencies.filter(function(d){return d&&d.title&&d.severity});
+            parsed.deficiencies.forEach(function(d){if(!SEVERITY_CONFIG[d.severity]) d.severity="observation"});
+          }
+          setPct(100);setResults(parsed);setStep(4);
+        }catch(err){setError(err.message);setStep(2)}
+        finally{setLoading(false);setProgress("");setPct(0)}
+      }
+
+      function resetAll(){setStep(0);setGFiles([]);setDFiles([]);setCtx("");setSelGL([]);setResults(null);setError("")}
+      var canStep0=selGL.length>0||gFiles.length>0;
+      var canStep2=dFiles.length>0;
+      var STEPS=[{emoji:"\u{1F4CB}",label:"Guidelines"},{emoji:"\u{1F4D1}",label:"Upload DPR"},{emoji:"\u{1F50D}",label:"Analyze"},{emoji:"\u{1F4CA}",label:"Report"}];
+
+      return(
+        <div style={{minHeight:"100vh",backgroundColor:"#F5F7FA",fontFamily:"'Outfit',sans-serif"}}>
+          {/* HEADER with API status dot */}
+          <div style={{background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",padding:"16px 20px",borderBottom:"3px solid #0D9488"}}>
+            <div style={{maxWidth:"840px",margin:"0 auto",display:"flex",alignItems:"center",gap:"14px"}}>
+              <img src={BRO_LOGO} alt="BRO Logo" style={{height:"50px",borderRadius:"6px",backgroundColor:"rgba(255,255,255,0.9)",padding:"3px"}} onError={function(e){e.target.style.display="none"}}/>
+              <div style={{flex:1}}>
+                <h1 style={{margin:0,fontFamily:"'Playfair Display',serif",fontSize:"20px",fontWeight:800,color:"#fff"}}>DPR Analyzer Pro</h1>
+                <p style={{margin:0,fontSize:"11px",color:"rgba(255,255,255,0.45)"}}>Compliance Analysis Engine | Border Roads Organisation</p>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"6px"}}>
+                {/* API STATUS DOT */}
+                <div style={{display:"flex",alignItems:"center",gap:"6px",padding:"4px 10px",borderRadius:20,backgroundColor:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)"}} title={apiStatus==="ready"?"Analysis engine connected":"Analysis engine not configured"}>
+                  <div style={{width:10,height:10,borderRadius:"50%",backgroundColor:apiStatus==="ready"?"#22C55E":apiStatus==="checking"?"#FBBF24":"#EF4444",boxShadow:apiStatus==="ready"?"0 0 6px rgba(34,197,94,0.5)":"0 0 6px rgba(239,68,68,0.5)",animation:apiStatus==="ready"?"dotGlow 2s infinite":"none"}}/>
+                  <span style={{fontSize:"10px",color:"rgba(255,255,255,0.5)",fontWeight:600}}>{apiStatus==="ready"?"Engine Ready":apiStatus==="checking"?"Checking...":"Not Configured"}</span>
+                </div>
+                <p
+  style={{
+    margin: 0,
+    fontSize: "9px",
+    color: "rgba(255,255,255,0.3)",
+    lineHeight: 1.3,
+    textAlign: "right"
+  }}
+>
+  Developed by<br />
+  <span
+    style={{
+      color: "rgba(255,255,255,0.5)",
+      fontWeight: 600
+    }}
+  >
+    Col Ashish Bhardwaj
+  </span>
+  <br />
+  <span
+    style={{
+      color: "rgba(255,255,255,0.4)",
+      fontWeight: 500
+    }}
+  >
+    Project Arunank
+  </span>
+</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{maxWidth:"840px",margin:"0 auto",padding:"8px 16px 40px"}}>
+            {step<4&&<StepIndicator currentStep={step<3?step:2} steps={STEPS}/>}
+
+            {/* STEP 0: Guidelines (NO API key box) */}
+            {step===0&&(
+              <div style={{animation:"fadeIn 0.3s ease"}}>
+                <div style={{backgroundColor:"#F0FDFA",border:"1px solid #99F6E4",borderRadius:"14px",padding:"18px 20px",marginBottom:"20px"}}>
+                  <h3 style={{margin:"0 0 6px",fontSize:"15px",fontWeight:700,color:"#0F766E"}}>{"\u{1F44B} Welcome!"}</h3>
+                  <p style={{margin:0,fontSize:"13px",color:"#115E59",lineHeight:1.6}}>Analyze your DPR against IRC codes, MoRTH specifications, and other regulatory guidelines. Select the applicable standards below and upload your DPR document.</p>
+                </div>
+                {apiStatus==="error"&&(
+                  <div style={{backgroundColor:"#FEF2F2",border:"1px solid #FECACA",borderRadius:"12px",padding:"14px 18px",marginBottom:"16px",fontSize:"13px",color:"#DC2626"}}>
+                    {"\u26A0\uFE0F Analysis engine is not configured. Please contact the administrator to set up the environment variable."}
+                  </div>
+                )}
+                <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"16px"}}>
+                    <span style={{fontSize:"20px"}}>{"\u{1F4CB}"}</span>
+                    <div style={{flex:1}}><h3 style={{margin:0,fontSize:"15px",fontWeight:700,color:"#1a1a2e"}}>Select Guidelines</h3><p style={{margin:"2px 0 0",fontSize:"12px",color:"#94A3B8"}}>Choose standard codes or upload custom</p></div>
+                    <button onClick={selectAllGL} style={{fontSize:"12px",color:"#0D9488",background:"#F0FDFA",border:"1px solid #99F6E4",cursor:"pointer",padding:"6px 12px",borderRadius:"6px",fontWeight:600}}>{selGL.length===STANDARD_GUIDELINES.length?"Deselect All":"Select All"}</button>
+                  </div>
+                  <GuidelineSelector selected={selGL} onToggle={toggleGL}/>
+                  <div style={{marginTop:"20px",borderTop:"1px solid #F1F5F9",paddingTop:"16px"}}>
+                    <FileUploadZone label="Upload Custom Guidelines (Optional)" description="Your own regulation documents" files={gFiles} onAddFiles={addGFiles} onRemoveFile={removeGFile} icon={"\u{1F4E4}"}/>
+                  </div>
+                </div>
+                <button onClick={function(){if(canStep0){setError("");setStep(2)}else setError("Select at least one guideline.")}} style={{width:"100%",padding:"16px",borderRadius:"12px",border:"none",background:canStep0?"linear-gradient(135deg,#0D9488,#0F766E)":"#CBD5E1",color:"#fff",fontSize:"16px",fontWeight:700,cursor:canStep0?"pointer":"not-allowed"}}>{"Next \u2192 Upload Your DPR"}</button>
+                <DevCredit/>
+              </div>
+            )}
+
+            {/* STEP 2: Upload DPR */}
+            {step===2&&(
+              <div style={{animation:"fadeIn 0.3s ease"}}>
+                <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
+                  <FileUploadZone label="Upload Your DPR Document(s)" description="The DPR you want to analyze" files={dFiles} onAddFiles={addDFiles} onRemoveFile={removeDFile} icon={"\u{1F4D1}"}/>
+                  <div style={{backgroundColor:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:"10px",padding:"12px 16px",marginTop:"8px"}}>
+                    <div style={{fontSize:"13px",fontWeight:700,color:"#92400E",marginBottom:"4px"}}>{"\u{1F4A1} Supported: PDF, Excel (.xlsx/.xls), CSV, Word (.docx), Text (.txt)"}</div>
+                  </div>
+                </div>
+                <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
+                  <h3 style={{margin:"0 0 10px",fontSize:"15px",fontWeight:700,color:"#1a1a2e"}}>{"\u{1F4AC} Additional Context"} <span style={{fontWeight:400,color:"#94A3B8"}}>(Optional)</span></h3>
+                  <textarea value={ctx} onChange={function(e){setCtx(e.target.value)}} placeholder={"e.g. 4-lane NH project in Rajasthan, 120km\nFocus on pavement design and drainage\nCheck BOQ rates against DSR 2024"} style={{width:"100%",minHeight:"100px",padding:"14px 16px",borderRadius:"12px",border:"1.5px solid #E2E8F0",fontSize:"13px",fontFamily:"'Outfit',sans-serif",resize:"vertical",backgroundColor:"#FAFBFC",outline:"none",boxSizing:"border-box",lineHeight:1.6}}/>
+                </div>
+                <div style={{display:"flex",gap:"12px"}}>
+                  <button onClick={function(){setStep(0)}} style={{padding:"14px 24px",borderRadius:"12px",border:"1.5px solid #E2E8F0",backgroundColor:"#fff",color:"#64748B",fontSize:"14px",fontWeight:600,cursor:"pointer"}}>{"\u2190 Back"}</button>
+                  <button onClick={function(){if(canStep2){setError("");analyze()}else setError("Upload at least one DPR document.")}} style={{flex:1,padding:"16px",borderRadius:"12px",border:"none",background:canStep2?"linear-gradient(135deg,#0D9488,#0F766E)":"#CBD5E1",color:"#fff",fontSize:"16px",fontWeight:700,cursor:canStep2?"pointer":"not-allowed"}}>{"\u{1F50D} Analyze DPR Now"}</button>
+                </div>
+                <DevCredit/>
+              </div>
+            )}
+
+            {/* STEP 3: Loading - Professional messages, NO AI/backend mention */}
+            {step===3&&loading&&(
+              <div style={{textAlign:"center",padding:"60px 20px",backgroundColor:"#fff",borderRadius:"16px",border:"1px solid #E2E8F0",animation:"fadeIn 0.3s ease"}}>
+                <div style={{fontSize:"56px",marginBottom:"20px",animation:"pulse 2s infinite"}}>{"\u{1F50D}"}</div>
+                <h2 style={{margin:"0 0 8px",fontFamily:"'Playfair Display',serif",fontSize:"22px",color:"#1a1a2e"}}>Analyzing Your DPR...</h2>
+                <p style={{margin:"0 0 28px",fontSize:"14px",color:"#64748B"}}>{progress}</p>
+                <div style={{width:"100%",maxWidth:"400px",margin:"0 auto",height:"8px",backgroundColor:"#E2E8F0",borderRadius:"4px",overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:"4px",background:"linear-gradient(90deg,#0D9488,#14B8A6)",width:pct+"%",transition:"width 0.5s ease"}}/>
+                </div>
+                <p style={{margin:"10px 0 0",fontSize:"12px",color:"#94A3B8"}}>{pct+"%"}</p>
+                <div style={{marginTop:"30px",padding:"16px",backgroundColor:"#F8FAFC",borderRadius:"10px",display:"inline-block"}}>
+                  <p style={{margin:0,fontSize:"12px",color:"#64748B"}}>{"Checking compliance against IRC codes and MoRTH specifications. Typically takes 1-3 minutes."}</p>
+                </div>
+                <DevCredit/>
+              </div>
+            )}
+
+            {/* STEP 4: Results */}
+            {step===4&&results&&(<div style={{animation:"fadeIn 0.3s ease"}}><ResultsDashboard results={results} onReset={resetAll}/></div>)}
+
+            {/* ERROR */}
+            {error&&(
+              <div style={{backgroundColor:"#FEF2F2",border:"1px solid #FECACA",borderRadius:"12px",padding:"14px 18px",marginTop:"16px",fontSize:"14px",color:"#DC2626",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                <span style={{fontSize:"18px"}}>{"\u26A0\uFE0F"}</span>
+                <div><strong>Error:</strong> {error}<button onClick={function(){setError("")}} style={{display:"block",marginTop:"8px",fontSize:"12px",color:"#DC2626",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Dismiss</button></div>
+              </div>
+            )}
+
+            {/* HOW IT WORKS */}
+            {step<3&&(
+              <div style={{marginTop:"28px",padding:"18px 20px",borderRadius:"14px",backgroundColor:"#fff",border:"1px solid #E2E8F0"}}>
+                <h3 style={{margin:"0 0 12px",fontSize:"14px",fontWeight:700,color:"#1a1a2e"}}>How It Works</h3>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"16px"}}>
+                  {[{icon:"\u{1F4CB}",t:"1. Select Guidelines",d:"Pick IRC codes & standards"},{icon:"\u{1F4D1}",t:"2. Upload DPR",d:"PDF, Excel, Word - any format"},{icon:"\u{1F50D}",t:"3. Compliance Check",d:"Cross-reference against codes"},{icon:"\u{1F4CA}",t:"4. Get Report",d:"Issues with fix recommendations"}].map(function(s){
+                    return <div key={s.t} style={{textAlign:"center"}}><div style={{fontSize:"28px",marginBottom:"6px"}}>{s.icon}</div><div style={{fontSize:"13px",fontWeight:700,color:"#1a1a2e"}}>{s.t}</div><div style={{fontSize:"11px",color:"#94A3B8",marginTop:"2px"}}>{s.d}</div></div>;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ============ ROOT WITH AUTH GATE ============ */
+    function App(){
+      var as=useState(function(){return getSession()});var authed=as[0];var setAuthed=as[1];
+      if(!authed)return <PasswordGate onPass={function(){setAuthed(true)}}/>;
+      return <DPRAnalyzer/>;
+    }
+
+    ReactDOM.render(React.createElement(App,null),document.getElementById("root"));
+  </script>
+</body>
+</html>
