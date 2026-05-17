@@ -253,9 +253,9 @@
       var cats=[];var seen={};STANDARD_GUIDELINES.forEach(function(g){if(!seen[g.category]){seen[g.category]=true;cats.push(g.category)}});
       return(
         <div>
-          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px",padding:"8px 12px",backgroundColor:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:"8px"}}>
-            <span style={{fontSize:"12px"}}>{"\u26a0\ufe0f"}</span>
-            <span style={{fontSize:"11px",color:"#92400E"}}>Codes marked <span style={{backgroundColor:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:"4px",padding:"1px 5px",fontWeight:700,color:"#B45309",fontSize:"10px"}}>Limited Ref</span> have no uploaded reference document \u2014 findings for these codes are based on general knowledge only.</span>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px",padding:"8px 12px",backgroundColor:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:"8px"}}>
+            <span style={{fontSize:"12px"}}>{"\u{1F6AB}"}</span>
+            <span style={{fontSize:"11px",color:"#475569"}}>Codes shown in grey have no backing reference document loaded in this version and are disabled. Hover for details.</span>
           </div>
           {cats.map(function(cat){
             return(<div key={cat} style={{marginBottom:"14px"}}>
@@ -263,10 +263,12 @@
               <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
                 {STANDARD_GUIDELINES.filter(function(g){return g.category===cat}).map(function(g){
                   var on=props.selected.indexOf(g.code)!==-1;
+                  var disabled=!g.hasRef;
+                  var tip=disabled?"Reference document not yet available":"Full reference document loaded";
                   return(
-                    <button key={g.code} onClick={function(){props.onToggle(g.code)}} title={g.hasRef?"Full reference document loaded":"No reference document \u2014 findings based on general knowledge"} style={{padding:"7px 14px",borderRadius:"8px",fontSize:"12px",border:on?(g.hasRef?"2px solid #0D9488":"2px solid #D97706"):"1.5px solid #E2E8F0",backgroundColor:on?(g.hasRef?"#F0FDFA":"#FFFBEB"):"#fff",color:on?(g.hasRef?"#0D9488":"#92400E"):"#475569",cursor:"pointer",fontWeight:600,position:"relative"}}>
-                      {on?"\u2713 ":""}<strong>{g.code}</strong><span style={{fontWeight:400,opacity:.7,marginLeft:"4px",fontSize:"11px"}}>{" \u2014 "+g.title}</span>
-                      {!g.hasRef&&<span style={{display:"inline-block",marginLeft:"6px",backgroundColor:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:"4px",padding:"1px 5px",fontWeight:700,color:"#B45309",fontSize:"10px",verticalAlign:"middle"}}>{"Limited Ref"}</span>}
+                    <button key={g.code} disabled={disabled} onClick={function(){if(!disabled)props.onToggle(g.code)}} title={tip} aria-disabled={disabled} style={{padding:"7px 14px",borderRadius:"8px",fontSize:"12px",border:disabled?"1.5px dashed #CBD5E1":(on?"2px solid #0D9488":"1.5px solid #E2E8F0"),backgroundColor:disabled?"#F1F5F9":(on?"#F0FDFA":"#fff"),color:disabled?"#94A3B8":(on?"#0D9488":"#475569"),cursor:disabled?"not-allowed":"pointer",fontWeight:600,position:"relative",opacity:disabled?0.7:1}}>
+                      {!disabled&&(on?"\u2713 ":"")}<strong>{g.code}</strong><span style={{fontWeight:400,opacity:.7,marginLeft:"4px",fontSize:"11px"}}>{" \u2014 "+g.title}</span>
+                      {disabled&&<span style={{display:"inline-block",marginLeft:"6px",backgroundColor:"#E2E8F0",border:"1px solid #CBD5E1",borderRadius:"4px",padding:"1px 5px",fontWeight:700,color:"#64748B",fontSize:"10px",verticalAlign:"middle"}}>{"No Ref"}</span>}
                     </button>
                   );
                 })}
