@@ -457,6 +457,17 @@
       var s11=useState(0),pct=s11[0],setPct=s11[1];
       var s12=useState("checking"),apiStatus=s12[0],setApiStatus=s12[1];
       var s13=useState([]),glFetchFailed=s13[0],setGlFetchFailed=s13[1];
+      /* Ver63: report header inputs */
+      function todayISO(){var d=new Date();var m=String(d.getMonth()+1).padStart(2,"0");var dd=String(d.getDate()).padStart(2,"0");return d.getFullYear()+"-"+m+"-"+dd}
+      var s14=useState(""),projectName=s14[0],setProjectName=s14[1];
+      var s15=useState(""),roadNumber=s15[0],setRoadNumber=s15[1];
+      var s16=useState(""),officerName=s16[0],setOfficerName=s16[1];
+      var s17=useState(""),officerDesignation=s17[0],setOfficerDesignation=s17[1];
+      var s18=useState(todayISO()),reviewDate=s18[0],setReviewDate=s18[1];
+      /* Ver63: guideline-load status (Step 4) */
+      var s19=useState("idle"),glStatus=s19[0],setGlStatus=s19[1]; /* idle|loading|ok|error */
+      var s20=useState([]),glLoaded=s20[0],setGlLoaded=s20[1];     /* [{file, version, bytes}] */
+      var s21=useState([]),glFailedList=s21[0],setGlFailedList=s21[1];
       var apiKeyRef=useRef("");
       var msgIdx=useRef(0);
 
@@ -522,7 +533,15 @@ setGlFetchFailed([]);
           }
           var gt="";
           if(selGL.length>0){gt="\n\nStandard guidelines to check against:\n"+selGL.map(function(g){var info=STANDARD_GUIDELINES.find(function(sg){return sg.code===g});return"- "+g+": "+(info?info.title:"")}).join("\n")}
-          var ct=ctx.trim()?"\n\nAdditional context: "+ctx:"";
+          var hdr="";
+          if(projectName||roadNumber||officerName||officerDesignation){
+            hdr="\n\nReport header (use these names/IDs when referring to the project):";
+            if(projectName)hdr+="\n- Project Name: "+projectName;
+            if(roadNumber)hdr+="\n- Road Number / Project Code: "+roadNumber;
+            if(officerName)hdr+="\n- Reviewing Officer: "+officerName+(officerDesignation?", "+officerDesignation:"");
+            if(reviewDate)hdr+="\n- Date of Review: "+reviewDate;
+          }
+          var ct=(ctx.trim()?"\n\nAdditional context: "+ctx:"")+hdr;
           blocks.push({type:"text",text:"Analyze the DPR document(s) above against guidelines and regulatory requirements."+gt+ct+"\n\nPerform a professional DPR compliance audit specifically for a BRO hill/mountain road project. PRIORITY CODES FOR BRO: IRC:SP:48 (Hill Road Design — check hairpin bends, formation width, hill cutting, retaining walls, side drains), IRC:52 (Mountain Roads), IRC:73 (Geometric Design — gradients, curves, sight distance), IRC:SP:13 (Culverts and minor bridges), IRC:SP:42 (Drainage — especially cross drainage in hill terrain, catch water drains, scuppers). Check all of: traffic data, geometric design, pavement, drainage, safety, environmental, land acquisition, cost estimation, material specs, bridges/culverts, survey, drawings, utilities, schedule, quality plan.\n\nCLAUSE-LEVEL CITATION RULES (MANDATORY — VER63):\nEvery deficiency MUST be backed by a specific clause from a loaded [IRC REFERENCE: filename] document. For every finding you MUST populate ALL of these fields:\n  - documentName: the exact document code, e.g. \"IRC:SP:42\", \"IRC:73\", \"IRC:SP:48\", \"MoRTH 5th Revision\". Take this from the [IRC REFERENCE: filename] header of the document you pulled the clause from.\n  - clauseNumber: the exact clause/section/table number as printed in that document, e.g. \"Clause 4.3.2\", \"Section 5.4\", \"Table 3.1\". DO NOT invent or paraphrase. Quote it verbatim.\n  - clauseSummary: a SINGLE concise line (max 30 words) stating what that specific clause requires.\n  - failureReason: a precise statement of HOW the DPR fails to meet this specific clause — quote the value/text from the DPR and contrast it with the clause's requirement.\nIf — and only if — the relevant clause cannot be located inside any [IRC REFERENCE: filename] block above, you MUST set:\n  - documentName: \"General Observation\"\n  - clauseNumber: \"N/A\"\n  - clauseSummary: \"General Observation — clause reference not available\"\n  - failureReason: still describe how the DPR is deficient on this point.\nNEVER fabricate a clause number. NEVER cite a code whose [IRC REFERENCE] block is not present above. If you are unsure, fall back to the General Observation form.\n\nThe legacy 'clause' field MUST still be populated for backwards compatibility — set it to documentName + \" \" + clauseNumber (e.g. \"IRC:SP:42 Clause 4.3.2\"), or \"General Observation\" when the clause is unavailable.\n\nCRITICAL: Output ONLY valid JSON. No markdown. No backticks. No text before or after. No trailing commas. Ensure every array and object is properly closed.\n\nThe output report will be used as a working guideline for engineers to carry out amendments in the DPR. So provide DETAILED and SPECIFIC information in every field.\n\n{\"summary\":\"4-5 sentence overview of DPR quality, key gaps, and overall compliance assessment\",\"complianceScore\":<0-100>,\"riskLevel\":\"Low|Moderate|High|Severe\",\"deficiencies\":[{\"severity\":\"critical|major|minor|observation\",\"category\":\"Design|Pavement|Drainage|Safety|Cost|Survey|Structural|Environmental|Land|Utilities|Schedule|Quality|Documentation\",\"title\":\"Clear issue title\",\"documentName\":\"IRC:SP:42 | IRC:73 | MoRTH 5th Revision | ... | General Observation\",\"clauseNumber\":\"Clause 4.3.2 | Section 5.4 | Table 3.1 | N/A\",\"clauseSummary\":\"One-line summary of what that clause requires, or 'General Observation — clause reference not available'\",\"failureReason\":\"How the DPR fails to meet this specific clause — quote DPR values vs clause requirement\",\"clause\":\"documentName + space + clauseNumber for backwards compat\",\"location\":\"Exact DPR location - sheet name, section, page, table, row number, chainage etc.\",\"description\":\"Detailed technical explanation of what is wrong, what is missing, or what does not comply. Include specific values found vs required values where applicable. 2-3 sentences.\",\"impact\":\"Detailed consequence if this deficiency is not corrected - structural risk, cost overrun, safety hazard, project delay, regulatory rejection etc. 2-3 sentences.\",\"recommendation\":\"Step-by-step actionable fix with specific standards to follow, calculations to perform, data to collect, or sections to add. 2-3 sentences.\"}]}\n\nSeverity definitions: critical=direct safety hazard or mandatory IRC/MoRTH code violation; major=significant technical flaw or missing mandatory calculation; minor=incomplete or insufficient data, missing supporting documents, inadequate detail; observation=suggestion for improvement or best practice recommendation. A well-prepared DPR will typically have a balanced mix of all four severity levels. Provide detailed content in description, impact, and recommendation fields (2-3 sentences each). Minimum 12 findings. Maximum 20."});
 
           /* Start cycling progress messages - NO mention of any backend */
@@ -594,12 +613,15 @@ setGlFetchFailed([]);
               if(!d.clause)d.clause=(d.documentName==="General Observation")?"General Observation":(d.documentName+" "+d.clauseNumber);
             });
           }
+          /* Ver63: attach report-header metadata so PDF/Word/Print can use it */
+          parsed.reportHeader={projectName:projectName,roadNumber:roadNumber,officerName:officerName,officerDesignation:officerDesignation,reviewDate:reviewDate};
+          parsed.loadedGuidelines=glLoaded.slice();
           setPct(100);setResults(parsed);setStep(4);
         }catch(err){setError(err.message);setStep(2)}
         finally{setLoading(false);setProgress("");setPct(0)}
       }
 
-      function resetAll(){setStep(0);setGFiles([]);setDFiles([]);setCtx("");setSelGL([]);setResults(null);setError("");setGlFetchFailed([])}
+      function resetAll(){setStep(0);setGFiles([]);setDFiles([]);setCtx("");setSelGL([]);setResults(null);setError("");setGlFetchFailed([]);setProjectName("");setRoadNumber("");setOfficerName("");setOfficerDesignation("");setReviewDate(todayISO())}
       var canStep0=selGL.length>0||gFiles.length>0;
       var canStep2=dFiles.length>0;
       var STEPS=[{emoji:"\u{1F4CB}",label:"Guidelines"},{emoji:"\u{1F4D1}",label:"Upload DPR"},{emoji:"\u{1F50D}",label:"Analyze"},{emoji:"\u{1F4CA}",label:"Report"}];
@@ -690,6 +712,32 @@ setGlFetchFailed([]);
                   <FileUploadZone label="Upload Your DPR Document(s)" description="The DPR you want to analyze" files={dFiles} onAddFiles={addDFiles} onRemoveFile={removeDFile} icon={"\u{1F4D1}"}/>
                   <div style={{backgroundColor:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:"10px",padding:"12px 16px",marginTop:"8px"}}>
                     <div style={{fontSize:"13px",fontWeight:700,color:"#92400E",marginBottom:"4px"}}>{"\u{1F4A1} Supported: PDF, Excel (.xlsx/.xls), CSV, Word (.docx), Text (.txt)"}</div>
+                  </div>
+                </div>
+                <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
+                  <h3 style={{margin:"0 0 4px",fontSize:"15px",fontWeight:700,color:"#1a1a2e"}}>{"\u{1F4CB} Report Header Details"}</h3>
+                  <p style={{margin:"0 0 14px",fontSize:"12px",color:"#94A3B8"}}>These appear on the BRO-styled PDF, Word and printed reports.</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+                    <div>
+                      <label style={{display:"block",fontSize:"11px",fontWeight:700,color:"#475569",marginBottom:"4px",textTransform:"uppercase",letterSpacing:.4}}>DPR Project Name</label>
+                      <input type="text" value={projectName} onChange={function(e){setProjectName(e.target.value)}} placeholder="e.g. Improvement of Tawang-Bumla Road" style={{width:"100%",padding:"10px 12px",borderRadius:"8px",border:"1.5px solid #E2E8F0",fontSize:"13px",fontFamily:"'Outfit',sans-serif",backgroundColor:"#FAFBFC",outline:"none",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:"11px",fontWeight:700,color:"#475569",marginBottom:"4px",textTransform:"uppercase",letterSpacing:.4}}>Road No. / Project Code</label>
+                      <input type="text" value={roadNumber} onChange={function(e){setRoadNumber(e.target.value)}} placeholder="e.g. GREF-AR-NH13" style={{width:"100%",padding:"10px 12px",borderRadius:"8px",border:"1.5px solid #E2E8F0",fontSize:"13px",fontFamily:"'Outfit',sans-serif",backgroundColor:"#FAFBFC",outline:"none",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:"11px",fontWeight:700,color:"#475569",marginBottom:"4px",textTransform:"uppercase",letterSpacing:.4}}>Reviewing Officer Name</label>
+                      <input type="text" value={officerName} onChange={function(e){setOfficerName(e.target.value)}} placeholder="e.g. Col Ashish Bhardwaj" style={{width:"100%",padding:"10px 12px",borderRadius:"8px",border:"1.5px solid #E2E8F0",fontSize:"13px",fontFamily:"'Outfit',sans-serif",backgroundColor:"#FAFBFC",outline:"none",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:"11px",fontWeight:700,color:"#475569",marginBottom:"4px",textTransform:"uppercase",letterSpacing:.4}}>Designation</label>
+                      <input type="text" value={officerDesignation} onChange={function(e){setOfficerDesignation(e.target.value)}} placeholder="e.g. CWE (P) Arunank" style={{width:"100%",padding:"10px 12px",borderRadius:"8px",border:"1.5px solid #E2E8F0",fontSize:"13px",fontFamily:"'Outfit',sans-serif",backgroundColor:"#FAFBFC",outline:"none",boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:"11px",fontWeight:700,color:"#475569",marginBottom:"4px",textTransform:"uppercase",letterSpacing:.4}}>Date of Review</label>
+                      <input type="date" value={reviewDate} onChange={function(e){setReviewDate(e.target.value)}} style={{width:"100%",padding:"10px 12px",borderRadius:"8px",border:"1.5px solid #E2E8F0",fontSize:"13px",fontFamily:"'Outfit',sans-serif",backgroundColor:"#FAFBFC",outline:"none",boxSizing:"border-box"}}/>
+                    </div>
                   </div>
                 </div>
                 <div style={{backgroundColor:"#fff",borderRadius:"16px",padding:"22px",marginBottom:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0"}}>
