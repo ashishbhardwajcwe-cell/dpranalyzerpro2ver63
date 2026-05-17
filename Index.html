@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DPR Analyzer Pro - Border Roads Organisation</title>
+  <title>DPR Analyzer Pro Ver63 - Border Roads Organisation</title>
   <link rel="icon" href="https://bro.gov.in/sites/default/files/bro-logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -175,7 +175,7 @@
         <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <div style={{backgroundColor:"#fff",borderRadius:20,padding:"40px 36px",maxWidth:420,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",textAlign:"center"}}>
             <img src={BRO_LOGO} alt="BRO" style={{height:70,marginBottom:16,borderRadius:8}} onError={function(e){e.target.style.display="none"}}/>
-            <h1 style={{margin:"0 0 4px",fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:"#1a1a2e"}}>DPR Analyzer Pro</h1>
+            <h1 style={{margin:"0 0 4px",fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:"#1a1a2e"}}>DPR Analyzer Pro <span style={{fontSize:13,color:"#0D9488",fontWeight:700}}>Ver63</span></h1>
             <p style={{margin:"0 0 4px",fontSize:12,color:"#64748B"}}>Border Roads Organisation</p>
             <p style={{margin:"0 0 24px",fontSize:11,color:"#94A3B8"}}>Developed by Col Ashish Bhardwaj</p>
             <div style={{backgroundColor:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:10,padding:"12px 16px",marginBottom:20,textAlign:"left"}}>
@@ -475,7 +475,7 @@
           var blocks=[];var tot=gFiles.length+dFiles.length;var done=0;
 
 /* Auto-fetch IRC guideline files from GitHub */
-var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver61/main/guidelines/";
+var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver63/main/guidelines/";
 var IRC_FILES=["IRC_37_2018_Extracted.md","IRC_52_2019_Extraction.md","IRC_SP19_DPR_Analyzer_Extraction.md","IRC_SP48_2023_DPR_Analyzer_Extraction.md","MoRTH_DPR_Reference_Extract.md","IRC_73_1980_Extraction.md","IRC_SP13_DPR_Analyzer_Extraction.md","IRC_SP42_2014_DPR_Analyzer_Extraction.md"];
 setProgress("Loading IRC reference codes...");setPct(3);
 var failedFiles=[];
@@ -588,7 +588,7 @@ setGlFetchFailed([]);
             <div style={{maxWidth:"840px",margin:"0 auto",display:"flex",alignItems:"center",gap:"14px"}}>
               <img src={BRO_LOGO} alt="BRO Logo" style={{height:"50px",borderRadius:"6px",backgroundColor:"rgba(255,255,255,0.9)",padding:"3px"}} onError={function(e){e.target.style.display="none"}}/>
               <div style={{flex:1}}>
-                <h1 style={{margin:0,fontFamily:"'Playfair Display',serif",fontSize:"20px",fontWeight:800,color:"#fff"}}>DPR Analyzer Pro</h1>
+                <h1 style={{margin:0,fontFamily:"'Playfair Display',serif",fontSize:"20px",fontWeight:800,color:"#fff"}}>DPR Analyzer Pro <span style={{fontSize:"12px",fontWeight:700,opacity:.7,letterSpacing:1}}>Ver63</span></h1>
                 <p style={{margin:0,fontSize:"11px",color:"rgba(255,255,255,0.45)"}}>Compliance Analysis Engine | Border Roads Organisation</p>
               </div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"6px"}}>
