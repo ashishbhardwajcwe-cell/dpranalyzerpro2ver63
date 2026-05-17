@@ -389,7 +389,8 @@
       var filtered=defs.filter(function(d){if(filterSev!=="all"&&d.severity!==filterSev) return false;if(filterCat!=="all"&&d.category!==filterCat) return false;return true});
       var riskCfg=RISK_CONFIG[results.riskLevel]||RISK_CONFIG.Moderate;
 
-      function handlePrint(){
+      /* Ver63: Shared HTML report builder. mode = 'pdf' | 'word' | 'print' */
+      function buildReportHTML(mode){
         var defs=results.deficiencies||[];
         var counts={};["critical","major","minor","observation"].forEach(function(k){counts[k]=defs.filter(function(d){return d.severity===k}).length});
         var total=defs.length;var now=new Date();
@@ -399,72 +400,160 @@
         var sevLabels={critical:"CRITICAL",major:"MAJOR",minor:"MINOR",observation:"INFO"};
         var sevBorders={critical:"#DC2626",major:"#D97706",minor:"#2563EB",observation:"#6B7280"};
         var scoreColor=(results.complianceScore>=70)?"#16A34A":(results.complianceScore>=40)?"#D97706":"#DC2626";
-        var findingsHtml="";
-        defs.forEach(function(d,i){
+        var hdr=results.reportHeader||{};
+        var reviewDateStr=hdr.reviewDate?(function(){try{var p=hdr.reviewDate.split("-");return p[2]+"-"+p[1]+"-"+p[0]}catch(e){return hdr.reviewDate}})():dateStr;
+        var loadedGL=results.loadedGuidelines||[];
+
+        function buildFindingBlock(d,i){
           var sc=sevColors[d.severity]||sevColors.observation;var sl=sevLabels[d.severity]||"INFO";var sb=sevBorders[d.severity]||"#6B7280";
-          findingsHtml+="<div style='border-left:5px solid "+sb+";background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:18px 20px;margin-bottom:14px;page-break-inside:avoid'>";
-          findingsHtml+="<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap'>";
-          findingsHtml+="<span style='font-family:monospace;font-size:13px;font-weight:700;color:#64748B'>#"+String(i+1).padStart(2,"0")+"</"+"span>";
-          findingsHtml+="<span style='display:inline-block;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:"+sc.bg+";color:"+sc.text+";-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+sl+"</"+"span>";
-          if(d.category)findingsHtml+="<span style='font-size:11px;color:#475569;background:#F1F5F9;padding:3px 10px;border-radius:4px;font-weight:600'>"+esc(d.category)+"</"+"span>";
-          if(d.clause)findingsHtml+="<span style='font-size:11px;color:#475569;font-family:monospace;background:#F1F5F9;padding:3px 10px;border-radius:4px;font-weight:600'>"+esc(d.clause)+"</"+"span>";
-          findingsHtml+="</"+"div>";
-          findingsHtml+="<div style='font-size:14px;font-weight:700;color:#1E293B;margin-bottom:8px'>"+esc(d.title)+"</"+"div>";
-          if(d.location)findingsHtml+="<div style='margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>DPR Location:</"+"span> <span style='font-family:monospace;color:#0D9488;font-weight:600;font-size:12px'>"+esc(d.location)+"</"+"span></"+"div>";
-          if(d.description)findingsHtml+="<div style='margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>Description:</"+"span><div style='font-size:12px;color:#475569;line-height:1.7;margin-top:4px'>"+esc(d.description)+"</"+"div></"+"div>";
-          if(d.impact)findingsHtml+="<div style='background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#991B1B;text-transform:uppercase'>Impact if Not Corrected:</"+"span><div style='color:#DC2626;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.impact)+"</"+"div></"+"div>";
-          if(d.recommendation)findingsHtml+="<div style='background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:10px 14px;margin-bottom:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#166534;text-transform:uppercase'>Recommendation:</"+"span><div style='color:#15803D;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.recommendation)+"</"+"div></"+"div>";
-          findingsHtml+="</"+"div>";
-        });
-        var tableHtml="<table style='width:100%;border-collapse:collapse;table-layout:fixed;page-break-inside:auto'>";
-        tableHtml+="<thead style='display:table-header-group'><tr>";
-        var thS="background:#1a1a2e;color:#fff;padding:10px 6px;font-size:10px;border:1px solid #1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact";
-        tableHtml+="<th style='width:30px;text-align:center;"+thS+"'>#</"+"th><th style='width:70px;text-align:center;"+thS+"'>Severity</"+"th><th style='width:140px;"+thS+"'>Issue</"+"th><th style='width:80px;"+thS+"'>Category</"+"th><th style='width:90px;"+thS+"'>Clause</"+"th><th style='width:150px;"+thS+"'>DPR Location</"+"th><th style='"+thS+"'>Description</"+"th><th style='width:180px;"+thS+"'>Recommendation</"+"th>";
-        tableHtml+="</"+"tr></"+"thead><tbody>";
-        defs.forEach(function(d,i){
-          var sc2=sevColors[d.severity]||sevColors.observation;var sl2=sevLabels[d.severity]||"INFO";var bg2=(i%2===1)?"background:#F8FAFC;":"";
-          tableHtml+="<tr style='page-break-inside:avoid'><td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;font-weight:700;color:#64748B;vertical-align:top;"+bg2+"'>"+(i+1)+"</"+"td>";
-          tableHtml+="<td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;vertical-align:top;"+bg2+"'><span style='display:inline-block;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;background:"+sc2.bg+";color:"+sc2.text+";-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+sl2+"</"+"span></"+"td>";
-          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-weight:600;color:#1E293B;font-size:11px;vertical-align:top;"+bg2+"'>"+esc(d.title)+"</"+"td>";
-          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;vertical-align:top;"+bg2+"'>"+esc(d.category)+"</"+"td>";
-          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;vertical-align:top;"+bg2+"'>"+esc(d.clause)+"</"+"td>";
-          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;font-family:monospace;color:#0D9488;font-weight:600;vertical-align:top;"+bg2+"'>"+esc(d.location)+"</"+"td>";
-          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;line-height:1.4;vertical-align:top;"+bg2+"'>"+esc(d.description)+"</"+"td>";
-          tableHtml+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#166534;line-height:1.4;vertical-align:top;background:#F0FDF4;-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+esc(d.recommendation)+"</"+"td></"+"tr>";
-        });
-        tableHtml+="</"+"tbody></"+"table>";
+          var ct=d.complianceType||"Design";
+          var ctBg=ct==="Design"?"#EEF2FF":"#FEF3C7";var ctTxt=ct==="Design"?"#3730A3":"#92400E";
+          var out="";
+          out+="<div style='border-left:5px solid "+sb+";background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:18px 20px;margin-bottom:14px;page-break-inside:avoid'>";
+          out+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap'>";
+          out+="<span style='font-family:monospace;font-size:13px;font-weight:700;color:#64748B'>#"+String(i+1).padStart(2,"0")+"</"+"span>";
+          out+="<span style='display:inline-block;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:"+sc.bg+";color:"+sc.text+";-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+sl+"</"+"span>";
+          out+="<span style='display:inline-block;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:"+ctBg+";color:"+ctTxt+";text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+esc(ct)+"</"+"span>";
+          if(d.category)out+="<span style='font-size:11px;color:#475569;background:#F1F5F9;padding:3px 10px;border-radius:4px;font-weight:600'>"+esc(d.category)+"</"+"span>";
+          if(d.documentName)out+="<span style='font-size:11px;color:#1E3A8A;background:#EFF6FF;padding:3px 10px;border-radius:4px;font-weight:700;font-family:monospace;-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+esc(d.documentName)+(d.clauseNumber&&d.clauseNumber!=="N/A"?" "+esc(d.clauseNumber):"")+"</"+"span>";
+          out+="</"+"div>";
+          out+="<div style='font-size:14px;font-weight:700;color:#1E293B;margin-bottom:8px'>"+esc(d.title)+"</"+"div>";
+          if(d.clauseSummary)out+="<div style='background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:10px 14px;margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>Clause requires:</"+"span><div style='font-size:12px;color:#1E293B;margin-top:4px;line-height:1.6'>"+esc(d.clauseSummary)+"</"+"div></"+"div>";
+          if(d.failureReason)out+="<div style='background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#991B1B;text-transform:uppercase'>How DPR fails it:</"+"span><div style='font-size:12px;color:#7F1D1D;margin-top:4px;line-height:1.6'>"+esc(d.failureReason)+"</"+"div></"+"div>";
+          if(d.location)out+="<div style='margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>DPR Location:</"+"span> <span style='font-family:monospace;color:#0D9488;font-weight:600;font-size:12px'>"+esc(d.location)+"</"+"span></"+"div>";
+          if(d.description)out+="<div style='margin-bottom:10px'><span style='font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase'>Description:</"+"span><div style='font-size:12px;color:#475569;line-height:1.7;margin-top:4px'>"+esc(d.description)+"</"+"div></"+"div>";
+          if(d.impact)out+="<div style='background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#991B1B;text-transform:uppercase'>Impact if Not Corrected:</"+"span><div style='color:#DC2626;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.impact)+"</"+"div></"+"div>";
+          if(d.correctiveAction)out+="<div style='background:#ECFEFF;border:1px solid #A5F3FC;border-radius:6px;padding:10px 14px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#155E75;text-transform:uppercase'>Recommended Corrective Action:</"+"span><div style='color:#0E7490;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.correctiveAction)+"</"+"div></"+"div>";
+          if(d.severityJustification)out+="<div style='background:#FFF7ED;border:1px solid #FED7AA;border-radius:6px;padding:10px 14px;margin-bottom:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact'><span style='font-size:11px;font-weight:700;color:#9A3412;text-transform:uppercase'>Severity Justification:</"+"span><div style='color:#B45309;font-size:12px;margin-top:4px;line-height:1.6'>"+esc(d.severityJustification)+"</"+"div></"+"div>";
+          out+="</"+"div>";
+          return out;
+        }
+        function buildTable(rows){
+          var t="<table style='width:100%;border-collapse:collapse;table-layout:fixed;page-break-inside:auto'>";
+          t+="<thead style='display:table-header-group'><tr>";
+          var thS="background:#1a1a2e;color:#fff;padding:10px 6px;font-size:10px;border:1px solid #1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact";
+          t+="<th style='width:28px;text-align:center;"+thS+"'>#</th><th style='width:65px;text-align:center;"+thS+"'>Severity</th><th style='width:75px;text-align:center;"+thS+"'>Type</th><th style='width:130px;"+thS+"'>Issue</th><th style='width:110px;"+thS+"'>Document &amp; Clause</th><th style='width:140px;"+thS+"'>DPR Location</th><th style='"+thS+"'>How DPR Fails</th><th style='width:170px;"+thS+"'>Corrective Action</th>";
+          t+="</tr></thead><tbody>";
+          rows.forEach(function(d,i){
+            var sc2=sevColors[d.severity]||sevColors.observation;var sl2=sevLabels[d.severity]||"INFO";var bg2=(i%2===1)?"background:#F8FAFC;":"";
+            var ct2=d.complianceType||"Design";
+            t+="<tr style='page-break-inside:avoid'><td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;font-weight:700;color:#64748B;vertical-align:top;"+bg2+"'>"+(i+1)+"</td>";
+            t+="<td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;vertical-align:top;"+bg2+"'><span style='display:inline-block;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;background:"+sc2.bg+";color:"+sc2.text+";-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+sl2+"</span></td>";
+            t+="<td style='padding:8px 4px;border:1px solid #E2E8F0;text-align:center;font-size:10px;color:"+(ct2==="Design"?"#3730A3":"#92400E")+";font-weight:700;vertical-align:top;"+bg2+"'>"+esc(ct2)+"</td>";
+            t+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-weight:600;color:#1E293B;font-size:11px;vertical-align:top;"+bg2+"'>"+esc(d.title)+"</td>";
+            t+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#1E3A8A;font-family:monospace;font-weight:600;vertical-align:top;"+bg2+"'>"+esc((d.documentName||"")+(d.clauseNumber&&d.clauseNumber!=="N/A"?" "+d.clauseNumber:""))+"</td>";
+            t+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;font-family:monospace;color:#0D9488;font-weight:600;vertical-align:top;"+bg2+"'>"+esc(d.location||"")+"</td>";
+            t+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#475569;line-height:1.4;vertical-align:top;"+bg2+"'>"+esc(d.failureReason||d.description||"")+"</td>";
+            t+="<td style='padding:8px 6px;border:1px solid #E2E8F0;font-size:10px;color:#0E7490;line-height:1.4;vertical-align:top;background:#ECFEFF;-webkit-print-color-adjust:exact;print-color-adjust:exact'>"+esc(d.correctiveAction||d.recommendation||"")+"</td></tr>";
+          });
+          t+="</tbody></table>";
+          return t;
+        }
+
+        var headerMetaRows="";
+        function metaCell(k,v){return "<td style='padding:6px 10px;border:1px solid #E2E8F0;font-size:11px;color:#1E293B;vertical-align:top'><div style='font-size:9px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px'>"+esc(k)+"</div>"+esc(v||"—")+"</td>"}
+        headerMetaRows+="<tr>"+metaCell("DPR Project Name",hdr.projectName)+metaCell("Road No. / Project Code",hdr.roadNumber)+"</tr>";
+        headerMetaRows+="<tr>"+metaCell("Reviewing Officer",(hdr.officerName||"")+(hdr.officerDesignation?", "+hdr.officerDesignation:""))+metaCell("Date of Review",reviewDateStr)+"</tr>";
+        headerMetaRows+="<tr>"+metaCell("Compliance Score",results.complianceScore+"%")+metaCell("Risk Level",results.riskLevel||"—")+"</tr>";
+
+        var pageSize=(mode==="word")?"A4":"A3 landscape";
+        var bodyPadding=(mode==="print")?"24px":"20px";
+
         var h=[];
-        h.push("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>DPR Analysis Report<"+"/title>");
-        h.push("<style>@page{size:A3 landscape;margin:12mm}body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px;color:#1E293B;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}<"+"/style>");
-        h.push("<"+"/head><body>");
-        h.push("<div style='background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;padding:20px 30px;border-radius:8px;margin-bottom:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact'>");
+        h.push("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>DPR Analysis Report"+(hdr.projectName?" — "+esc(hdr.projectName):"")+"</title>");
+        h.push("<style>@page{size:"+pageSize+";margin:12mm}body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:"+bodyPadding+";color:#1E293B;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}");
+        if(mode==="print"){h.push(".no-screen{display:none}.print-banner{position:sticky;top:0;background:#0D9488;color:#fff;padding:10px 18px;text-align:center;font-weight:700;font-size:13px;border-radius:6px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,.1)}@media print{.print-banner{display:none}}")}
+        h.push("</style></head><body>");
+
+        if(mode==="print"){h.push("<div class='print-banner'>🖨️ Print View — use your browser's Print menu (Ctrl/Cmd+P) to print or save as PDF.</div>")}
+
+        /* BRO-styled header */
+        h.push("<div style='background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;padding:20px 30px;border-radius:8px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact'>");
         h.push("<div style='display:flex;align-items:center;gap:16px'>");
         h.push("<img src='"+BRO_LOGO+"' alt='BRO' style='height:55px;border-radius:6px;background:rgba(255,255,255,0.9);padding:3px' onerror='this.style.display=\"none\"'/>");
-        h.push("<div style='flex:1'><div style='font-size:11px;opacity:0.5;letter-spacing:1px;text-transform:uppercase'>Border Roads Organisation<"+"/div>");
-        h.push("<div style='font-size:24px;font-weight:800;margin-top:2px'>DPR Analysis Report<"+"/div>");
-        h.push("<div style='font-size:12px;opacity:0.5;margin-top:4px'>"+dateStr+" at "+timeStr+"<"+"/div><"+"/div>");
-        h.push("<div style='text-align:right;font-size:11px;line-height:1.6'><div style='opacity:0.4'>Developed by<"+"/div><div style='font-weight:700;font-size:13px;opacity:0.8'>Col Ashish Bhardwaj<"+"/div><"+"/div>");
-        h.push("<"+"/div><"+"/div>");
+        h.push("<div style='flex:1'><div style='font-size:11px;opacity:0.5;letter-spacing:1px;text-transform:uppercase'>Border Roads Organisation</div>");
+        h.push("<div style='font-size:24px;font-weight:800;margin-top:2px'>DPR Analysis Report <span style=\"font-size:13px;opacity:.7;font-weight:700;letter-spacing:1px;margin-left:6px\">Ver63</span></div>");
+        h.push("<div style='font-size:12px;opacity:0.5;margin-top:4px'>Generated "+dateStr+" at "+timeStr+"</div></div>");
+        h.push("<div style='text-align:right;font-size:11px;line-height:1.6'><div style='opacity:0.4'>Developed by</div><div style='font-weight:700;font-size:13px;opacity:0.8'>Col Ashish Bhardwaj</div></div>");
+        h.push("</div></div>");
+
+        /* Project meta table */
+        h.push("<div style='background:#fff;border:2px solid #E2E8F0;border-radius:8px;padding:16px 20px;margin-bottom:18px'>");
+        h.push("<div style='font-size:15px;font-weight:700;margin-bottom:10px;color:#1a1a2e'>Project & Review Details</div>");
+        h.push("<table style='width:100%;border-collapse:collapse;table-layout:fixed'>"+headerMetaRows+"</table>");
+        h.push("</div>");
+
+        /* Executive summary */
         h.push("<div style='background:#fff;border:2px solid #E2E8F0;border-radius:8px;padding:20px 24px;margin-bottom:24px'>");
-        h.push("<div style='font-size:16px;font-weight:700;margin-bottom:10px;color:#1a1a2e'>Executive Summary<"+"/div>");
-        h.push("<p style='margin:0 0 16px;line-height:1.7;color:#475569;font-size:13px'>"+esc(results.summary)+"<"+"/p>");
+        h.push("<div style='font-size:16px;font-weight:700;margin-bottom:10px;color:#1a1a2e'>Executive Summary</div>");
+        h.push("<p style='margin:0 0 16px;line-height:1.7;color:#475569;font-size:13px'>"+esc(results.summary)+"</p>");
         h.push("<div style='display:flex;flex-wrap:wrap;gap:10px'>");
-        h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:26px;font-weight:800;color:"+scoreColor+"'>"+results.complianceScore+"%<"+"/div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>Compliance<"+"/div><"+"/span>");
-        if(results.riskLevel){var rc2=(results.riskLevel==="Severe"||results.riskLevel==="High")?"#DC2626":"#D97706";h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:20px;font-weight:800;color:"+rc2+"'>"+esc(results.riskLevel)+"<"+"/div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>Risk Level<"+"/div><"+"/span>")}
-        [{n:counts.critical,l:"Critical",c:"#DC2626"},{n:counts.major,l:"Major",c:"#D97706"},{n:counts.minor,l:"Minor",c:"#2563EB"},{n:counts.observation,l:"Info",c:"#6B7280"},{n:total,l:"Total",c:"#0D9488"}].forEach(function(si){h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:26px;font-weight:800;color:"+si.c+"'>"+si.n+"<"+"/div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>"+si.l+"<"+"/div><"+"/span>")});
-        h.push("<"+"/div><"+"/div>");
-        h.push("<div style='font-size:17px;font-weight:700;color:#1a1a2e;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #1a1a2e'>Part A: Quick Reference Table<"+"/div>");
-        h.push(tableHtml);
-        h.push("<div style='font-size:17px;font-weight:700;color:#1a1a2e;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #1a1a2e;page-break-before:always'>Part B: Detailed Findings and Recommendations<"+"/div>");
-        h.push("<p style='font-size:12px;color:#64748B;margin-bottom:16px;line-height:1.6'>Each finding includes the complete description, impact assessment, and specific actionable recommendations for DPR amendment.<"+"/p>");
-        h.push(findingsHtml);
-        h.push("<div style='text-align:center;font-size:10px;color:#64748B;margin-top:24px;padding-top:12px;border-top:2px solid #1a1a2e'>");
-        h.push("<strong>Generated by DPR Analyzer Pro<"+"/strong> | Border Roads Organisation | <strong>Developed by Col Ashish Bhardwaj<"+"/strong><br>");
-        h.push("<span style='font-size:9px;color:#94A3B8'>All findings should be verified by a qualified engineer.<"+"/span><"+"/div>");
-        h.push("<"+"/body><"+"/html>");
+        h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:26px;font-weight:800;color:"+scoreColor+"'>"+results.complianceScore+"%</div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>Compliance</div></span>");
+        if(results.riskLevel){var rc2=(results.riskLevel==="Severe"||results.riskLevel==="High")?"#DC2626":"#D97706";h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:20px;font-weight:800;color:"+rc2+"'>"+esc(results.riskLevel)+"</div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>Risk Level</div></span>")}
+        [{n:counts.critical,l:"Critical",c:"#DC2626"},{n:counts.major,l:"Major",c:"#D97706"},{n:counts.minor,l:"Minor",c:"#2563EB"},{n:counts.observation,l:"Info",c:"#6B7280"},{n:total,l:"Total",c:"#0D9488"}].forEach(function(si){h.push("<span style='display:inline-block;text-align:center;padding:8px 18px;border-radius:8px;border:2px solid #E2E8F0'><div style='font-size:26px;font-weight:800;color:"+si.c+"'>"+si.n+"</div><div style='font-size:9px;text-transform:uppercase;color:#64748B;margin-top:4px;font-weight:700'>"+si.l+"</div></span>")});
+        h.push("</div></div>");
+
+        /* Part A: table */
+        h.push("<div style='font-size:17px;font-weight:700;color:#1a1a2e;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #1a1a2e'>Part A: Quick Reference Table</div>");
+        h.push(buildTable(defs));
+
+        /* Part B: split into Design + Documentation */
+        h.push("<div style='font-size:17px;font-weight:700;color:#1a1a2e;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #1a1a2e;page-break-before:always'>Part B: Detailed Findings and Recommendations</div>");
+        h.push("<p style='font-size:12px;color:#64748B;margin-bottom:16px;line-height:1.6'>Each finding includes the cited clause, how the DPR fails to meet it, recommended corrective action and a severity justification.</p>");
+        var design=defs.filter(function(d){return (d.complianceType||"Design")==="Design"});
+        var docs=defs.filter(function(d){return d.complianceType==="Documentation"});
+        var running=0;
+        if(design.length>0){
+          h.push("<div style='background:#EEF2FF;border-left:4px solid #3730A3;padding:8px 14px;margin:6px 0 10px;border-radius:4px;font-size:13px;font-weight:700;color:#3730A3;text-transform:uppercase;letter-spacing:.5px'>Design Compliance ("+design.length+")</div>");
+          design.forEach(function(d){h.push(buildFindingBlock(d,running++))});
+        }
+        if(docs.length>0){
+          h.push("<div style='background:#FEF3C7;border-left:4px solid #92400E;padding:8px 14px;margin:18px 0 10px;border-radius:4px;font-size:13px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:.5px'>Documentation Compliance ("+docs.length+")</div>");
+          docs.forEach(function(d){h.push(buildFindingBlock(d,running++))});
+        }
+
+        /* Footer with guideline versions */
+        h.push("<div style='margin-top:28px;padding:14px 18px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px'>");
+        h.push("<div style='font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px'>Guideline Versions Referenced</div>");
+        if(loadedGL.length>0){
+          h.push("<div style='font-size:11px;font-family:monospace;color:#0F172A;line-height:1.7'>"+loadedGL.map(function(l){return esc(l.label+" ("+l.version+")")}).join(" &nbsp;•&nbsp; ")+"</div>");
+        } else {
+          h.push("<div style='font-size:11px;color:#94A3B8'>No guideline version metadata captured.</div>");
+        }
+        h.push("</div>");
+
+        h.push("<div style='text-align:center;font-size:10px;color:#64748B;margin-top:18px;padding-top:12px;border-top:2px solid #1a1a2e'>");
+        h.push("<strong>Generated by DPR Analyzer Pro Ver63</strong> | Border Roads Organisation | <strong>Developed by Col Ashish Bhardwaj</strong><br>");
+        h.push("<span style='font-size:9px;color:#94A3B8'>All findings should be verified by a qualified engineer.</span></div>");
+        h.push("</body></html>");
+        return h.join("");
+      }
+
+      function safeFileBase(){
+        var hdr=results.reportHeader||{};
+        var base=(hdr.projectName||hdr.roadNumber||"DPR_Analysis_Report").replace(/[^A-Za-z0-9._-]+/g,"_").replace(/_+/g,"_").replace(/^_|_$/g,"");
+        return base||"DPR_Analysis_Report";
+      }
+
+      function handleDownloadPDF(){
         var w=window.open("","_blank");
-        if(w){w.document.write(h.join(""));w.document.close();setTimeout(function(){w.print()},500)}
-        else{alert("Please allow popups to print the report.")}
+        if(!w){alert("Please allow popups so the PDF can be generated.");return}
+        w.document.write(buildReportHTML("pdf"));w.document.close();
+        setTimeout(function(){w.focus();w.print()},500);
+      }
+      function handleDownloadWord(){
+        var html=buildReportHTML("word");
+        /* Word recognises HTML packaged with these MSO headers */
+        var docHtml="<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'></head><body>"+html.replace(/^[\s\S]*?<body[^>]*>/i,"").replace(/<\/body>[\s\S]*$/i,"")+"</body></html>";
+        var blob=new Blob(["﻿"+docHtml],{type:"application/msword"});
+        var url=URL.createObjectURL(blob);
+        var a=document.createElement("a");a.href=url;a.download=safeFileBase()+".doc";document.body.appendChild(a);a.click();
+        setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url)},300);
+      }
+      function handlePrint(){
+        var w=window.open("","_blank");
+        if(!w){alert("Please allow popups to open the print view.");return}
+        w.document.write(buildReportHTML("print"));w.document.close();w.focus();
       }
 
       return(
@@ -472,8 +561,10 @@
           <div style={{background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",borderRadius:"18px",padding:"28px",marginBottom:"24px",color:"#fff",position:"relative",overflow:"hidden"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px",flexWrap:"wrap",gap:"10px"}}>
               <div><h2 style={{margin:"0 0 4px",fontFamily:"'Playfair Display',serif",fontSize:"24px",fontWeight:800}}>{"\u2705 Analysis Complete"}</h2><p style={{margin:0,fontSize:"13px",opacity:.6}}>{total+" issue"+(total!==1?"s":"")+" found"}</p></div>
-              <div style={{display:"flex",gap:"8px"}}>
-                <button onClick={handlePrint} style={{backgroundColor:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F5A8}\uFE0F Print Report"}</button>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}} className="no-print">
+                <button onClick={handleDownloadPDF} title="Open a print dialog \u2014 choose 'Save as PDF'" style={{backgroundColor:"#DC2626",border:"1px solid #DC2626",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:700}}>{"\u{1F4C4} PDF"}</button>
+                <button onClick={handleDownloadWord} title="Download an editable .doc file" style={{backgroundColor:"#1D4ED8",border:"1px solid #1D4ED8",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:700}}>{"\u{1F4DD} Word (.docx)"}</button>
+                <button onClick={handlePrint} title="Clean on-screen print view" style={{backgroundColor:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F5A8}\uFE0F Print View"}</button>
                 <button onClick={props.onReset} style={{backgroundColor:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F504} New Analysis"}</button>
               </div>
             </div>
