@@ -81,20 +81,20 @@
       Severe:{color:"#7F1D1D",bg:"#FEE2E2",border:"#FCA5A5"}
     };
     var STANDARD_GUIDELINES = [
-      {code:"IRC:37",title:"Design of Flexible Pavements",category:"Pavement"},
-      {code:"IRC:58",title:"Design of Rigid Pavements",category:"Pavement"},
-      {code:"IRC:SP:19",title:"Survey, Investigation & Preparation of Road Projects",category:"Survey"},
-      {code:"IRC:SP:84",title:"Specifications & Standards for Expressways",category:"Design"},
-      {code:"IRC:73",title:"Geometric Design Standards for Rural Highways",category:"Design"},
-      {code:"IRC:86",title:"Geometric Design Standards for Urban Roads",category:"Design"},
-      {code:"IRC:6",title:"Road Bridges - Loads & Stresses",category:"Bridge"},
-      {code:"IRC:112",title:"Code of Practice for Concrete Road Bridges",category:"Bridge"},
-      {code:"IRC:SP:13",title:"Guidelines for Design of Small Bridges & Culverts",category:"Bridge"},
-      {code:"MoRTH 5th Rev",title:"Specifications for Road & Bridge Works",category:"General"},
-      {code:"IRC:SP:42",title:"Road Drainage Guidelines",category:"Drainage"},
-      {code:"IRC:SP:55",title:"Road Safety Audit Guidelines",category:"Safety"},
-      {code:"BR Regulations",title:"Building & Road Regulations",category:"General"},
-      {code:"IS:1893",title:"Criteria for Earthquake Resistant Design",category:"Design"}
+      {code:"IRC:37",title:"Design of Flexible Pavements",category:"Pavement",hasRef:true},
+      {code:"IRC:58",title:"Design of Rigid Pavements",category:"Pavement",hasRef:false},
+      {code:"IRC:SP:19",title:"Survey, Investigation & Preparation of Road Projects",category:"Survey",hasRef:true},
+      {code:"IRC:SP:84",title:"Specifications & Standards for Expressways",category:"Design",hasRef:false},
+      {code:"IRC:73",title:"Geometric Design Standards for Rural Highways",category:"Design",hasRef:true},
+      {code:"IRC:86",title:"Geometric Design Standards for Urban Roads",category:"Design",hasRef:false},
+      {code:"IRC:6",title:"Road Bridges - Loads & Stresses",category:"Bridge",hasRef:false},
+      {code:"IRC:112",title:"Code of Practice for Concrete Road Bridges",category:"Bridge",hasRef:false},
+      {code:"IRC:SP:13",title:"Guidelines for Design of Small Bridges & Culverts",category:"Bridge",hasRef:true},
+      {code:"MoRTH 5th Rev",title:"Specifications for Road & Bridge Works",category:"General",hasRef:true},
+      {code:"IRC:SP:42",title:"Road Drainage Guidelines",category:"Drainage",hasRef:true},
+      {code:"IRC:SP:55",title:"Road Safety Audit Guidelines",category:"Safety",hasRef:false},
+      {code:"BR Regulations",title:"Building & Road Regulations",category:"General",hasRef:false},
+      {code:"IS:1893",title:"Criteria for Earthquake Resistant Design",category:"Design",hasRef:false}
     ];
 
     /* ============ SESSION HELPERS ============ */
@@ -251,17 +251,30 @@
 
     function GuidelineSelector(props){
       var cats=[];var seen={};STANDARD_GUIDELINES.forEach(function(g){if(!seen[g.category]){seen[g.category]=true;cats.push(g.category)}});
-      return(<div>{cats.map(function(cat){
-        return(<div key={cat} style={{marginBottom:"14px"}}>
-          <div style={{fontSize:"12px",fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:"8px"}}>{cat}</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
-            {STANDARD_GUIDELINES.filter(function(g){return g.category===cat}).map(function(g){
-              var on=props.selected.indexOf(g.code)!==-1;
-              return <button key={g.code} onClick={function(){props.onToggle(g.code)}} style={{padding:"7px 14px",borderRadius:"8px",fontSize:"12px",border:on?"2px solid #0D9488":"1.5px solid #E2E8F0",backgroundColor:on?"#F0FDFA":"#fff",color:on?"#0D9488":"#475569",cursor:"pointer",fontWeight:600}}>{on?"\u2713 ":""}<strong>{g.code}</strong><span style={{fontWeight:400,opacity:.7,marginLeft:"4px",fontSize:"11px"}}>{" \u2014 "+g.title}</span></button>;
-            })}
+      return(
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px",padding:"8px 12px",backgroundColor:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:"8px"}}>
+            <span style={{fontSize:"12px"}}>{"\u26a0\ufe0f"}</span>
+            <span style={{fontSize:"11px",color:"#92400E"}}>Codes marked <span style={{backgroundColor:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:"4px",padding:"1px 5px",fontWeight:700,color:"#B45309",fontSize:"10px"}}>Limited Ref</span> have no uploaded reference document \u2014 findings for these codes are based on general knowledge only.</span>
           </div>
-        </div>);
-      })}</div>);
+          {cats.map(function(cat){
+            return(<div key={cat} style={{marginBottom:"14px"}}>
+              <div style={{fontSize:"12px",fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:"8px"}}>{cat}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                {STANDARD_GUIDELINES.filter(function(g){return g.category===cat}).map(function(g){
+                  var on=props.selected.indexOf(g.code)!==-1;
+                  return(
+                    <button key={g.code} onClick={function(){props.onToggle(g.code)}} title={g.hasRef?"Full reference document loaded":"No reference document \u2014 findings based on general knowledge"} style={{padding:"7px 14px",borderRadius:"8px",fontSize:"12px",border:on?(g.hasRef?"2px solid #0D9488":"2px solid #D97706"):"1.5px solid #E2E8F0",backgroundColor:on?(g.hasRef?"#F0FDFA":"#FFFBEB"):"#fff",color:on?(g.hasRef?"#0D9488":"#92400E"):"#475569",cursor:"pointer",fontWeight:600,position:"relative"}}>
+                      {on?"\u2713 ":""}<strong>{g.code}</strong><span style={{fontWeight:400,opacity:.7,marginLeft:"4px",fontSize:"11px"}}>{" \u2014 "+g.title}</span>
+                      {!g.hasRef&&<span style={{display:"inline-block",marginLeft:"6px",backgroundColor:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:"4px",padding:"1px 5px",fontWeight:700,color:"#B45309",fontSize:"10px",verticalAlign:"middle"}}>{"Limited Ref"}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>);
+          })}
+        </div>
+      );
     }
 
     function SeverityBadge(props){var c=SEVERITY_CONFIG[props.severity]||SEVERITY_CONFIG.observation;return <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px",borderRadius:"20px",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",backgroundColor:c.badge,color:"#fff"}}>{c.emoji+" "+c.label}</span>}
@@ -432,6 +445,7 @@
       var s10=useState(""),progress=s10[0],setProgress=s10[1];
       var s11=useState(0),pct=s11[0],setPct=s11[1];
       var s12=useState("checking"),apiStatus=s12[0],setApiStatus=s12[1];
+      var s13=useState([]),glFetchFailed=s13[0],setGlFetchFailed=s13[1];
       var apiKeyRef=useRef("");
       var msgIdx=useRef(0);
 
@@ -464,15 +478,29 @@
 var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver61/main/guidelines/";
 var IRC_FILES=["IRC_37_2018_Extracted.md","IRC_52_2019_Extraction.md","IRC_SP19_DPR_Analyzer_Extraction.md","IRC_SP48_2023_DPR_Analyzer_Extraction.md","MoRTH_DPR_Reference_Extract.md","IRC_73_1980_Extraction.md","IRC_SP13_DPR_Analyzer_Extraction.md","IRC_SP42_2014_DPR_Analyzer_Extraction.md"];
 setProgress("Loading IRC reference codes...");setPct(3);
+var failedFiles=[];
 for(var fi=0;fi<IRC_FILES.length;fi++){
   try{
-    var gr=await fetch(GITHUB_BASE+IRC_FILES[fi]);
-    if(gr.ok){
-      var gt2=await gr.text();
-      blocks.push({type:"text",text:"[IRC REFERENCE: "+IRC_FILES[fi]+"]\n"+gt2});
+    setProgress("Loading "+IRC_FILES[fi].replace(/_/g," ").replace(".md","")+"...");
+    var ircResp=await fetch(GITHUB_BASE+IRC_FILES[fi]);
+    if(ircResp.ok){
+      var ircText=await ircResp.text();
+      blocks.push({type:"text",text:"[IRC REFERENCE: "+IRC_FILES[fi]+"]\n"+ircText});
+      console.log("[DPR Analyzer] Loaded: "+IRC_FILES[fi]+" ("+ircText.length+" chars)");
+    }else{
+      console.error("[DPR Analyzer] HTTP "+ircResp.status+" loading "+IRC_FILES[fi]);
+      failedFiles.push(IRC_FILES[fi]+" (HTTP "+ircResp.status+")");
     }
-  }catch(e){console.warn("Could not load "+IRC_FILES[fi])}
+  }catch(e){
+    console.error("[DPR Analyzer] Network error loading "+IRC_FILES[fi]+": "+e.message);
+    failedFiles.push(IRC_FILES[fi]+" (network error)");
+  }
 }
+if(failedFiles.length>0){
+  setGlFetchFailed(failedFiles);
+  throw new Error("Could not load "+failedFiles.length+" IRC reference file"+(failedFiles.length>1?"s":"")+":\n• "+failedFiles.join("\n• ")+"\n\nAnalysis blocked — reference files must load to ensure accurate compliance checking. Check your network connection and retry.");
+}
+setGlFetchFailed([]);
           for(var gi=0;gi<gFiles.length;gi++){
             setProgress("Reading: "+gFiles[gi].name+"...");setPct(5+(done/tot)*40);
             var gr=await processFile(gFiles[gi]);if(Array.isArray(gr))gr.forEach(function(x){blocks.push(x)});else blocks.push(gr);done++;
@@ -548,7 +576,7 @@ for(var fi=0;fi<IRC_FILES.length;fi++){
         finally{setLoading(false);setProgress("");setPct(0)}
       }
 
-      function resetAll(){setStep(0);setGFiles([]);setDFiles([]);setCtx("");setSelGL([]);setResults(null);setError("")}
+      function resetAll(){setStep(0);setGFiles([]);setDFiles([]);setCtx("");setSelGL([]);setResults(null);setError("");setGlFetchFailed([])}
       var canStep0=selGL.length>0||gFiles.length>0;
       var canStep2=dFiles.length>0;
       var STEPS=[{emoji:"\u{1F4CB}",label:"Guidelines"},{emoji:"\u{1F4D1}",label:"Upload DPR"},{emoji:"\u{1F50D}",label:"Analyze"},{emoji:"\u{1F4CA}",label:"Report"}];
@@ -675,9 +703,20 @@ for(var fi=0;fi<IRC_FILES.length;fi++){
 
             {/* ERROR */}
             {error&&(
-              <div style={{backgroundColor:"#FEF2F2",border:"1px solid #FECACA",borderRadius:"12px",padding:"14px 18px",marginTop:"16px",fontSize:"14px",color:"#DC2626",display:"flex",alignItems:"flex-start",gap:"10px"}}>
-                <span style={{fontSize:"18px"}}>{"\u26A0\uFE0F"}</span>
-                <div><strong>Error:</strong> {error}<button onClick={function(){setError("")}} style={{display:"block",marginTop:"8px",fontSize:"12px",color:"#DC2626",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Dismiss</button></div>
+              <div style={{backgroundColor:"#FEF2F2",border:"2px solid #FECACA",borderRadius:"12px",padding:"16px 18px",marginTop:"16px",fontSize:"14px",color:"#DC2626",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                <span style={{fontSize:"20px",flexShrink:0}}>{"\u26A0\uFE0F"}</span>
+                <div style={{flex:1}}>
+                  <strong style={{fontSize:"15px"}}>{"Error"+(glFetchFailed.length>0?" \u2014 Reference Files Failed to Load":"")}</strong>
+                  <div style={{marginTop:"6px",whiteSpace:"pre-line",lineHeight:1.6}}>{error}</div>
+                  {glFetchFailed.length>0&&(
+                    <div style={{marginTop:"12px",padding:"10px 14px",backgroundColor:"#FFF",border:"1px solid #FECACA",borderRadius:"8px"}}>
+                      <div style={{fontWeight:700,fontSize:"12px",color:"#991B1B",marginBottom:"6px"}}>{"Files that failed to load:"}</div>
+                      {glFetchFailed.map(function(f){return <div key={f} style={{fontSize:"12px",fontFamily:"monospace",color:"#7F1D1D",padding:"2px 0"}}>{"\u2022 "+f}</div>})}
+                      <button onClick={function(){setError("");setGlFetchFailed([]);analyze()}} style={{marginTop:"10px",padding:"9px 18px",borderRadius:"8px",border:"none",background:"linear-gradient(135deg,#DC2626,#B91C1C)",color:"#fff",fontSize:"13px",fontWeight:700,cursor:"pointer"}}>{"\u21BB Retry Loading Guidelines & Analyze"}</button>
+                    </div>
+                  )}
+                  <button onClick={function(){setError("")}} style={{display:"inline-block",marginTop:"10px",fontSize:"12px",color:"#DC2626",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Dismiss</button>
+                </div>
               </div>
             )}
 
