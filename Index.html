@@ -461,7 +461,7 @@
           var blocks=[];var tot=gFiles.length+dFiles.length;var done=0;
 
 /* Auto-fetch IRC guideline files from GitHub */
-var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver60/main/guidelines/";
+var GITHUB_BASE="https://raw.githubusercontent.com/ashishbhardwajcwe-cell/dpranalyzerpro2ver61/main/guidelines/";
 var IRC_FILES=["IRC_37_2018_Extracted.md","IRC_52_2019_Extraction.md","IRC_SP19_DPR_Analyzer_Extraction.md","IRC_SP48_2023_DPR_Analyzer_Extraction.md","MoRTH_DPR_Reference_Extract.md","IRC_73_1980_Extraction.md","IRC_SP13_DPR_Analyzer_Extraction.md","IRC_SP42_2014_DPR_Analyzer_Extraction.md"];
 setProgress("Loading IRC reference codes...");setPct(3);
 for(var fi=0;fi<IRC_FILES.length;fi++){
@@ -495,7 +495,7 @@ for(var fi=0;fi<IRC_FILES.length;fi++){
           },3000);
 
           var body=JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:32000,
-            system:"You are a senior highway design auditor with 20+ years experience in IRC Codes, MoRTH Specifications (5th Revision), Bridge and Culvert Codes, Pavement Design, Geometric Design, Road Safety, Drainage, Seismic codes, Land Acquisition and Environmental norms. You perform professional DPR compliance audits for Indian Road/Highway projects. You are technically rigorous. You never hallucinate clause numbers.",
+            system:"You are a senior highway design auditor with 20+ years experience in IRC Codes, MoRTH Specifications (5th Revision), Bridge and Culvert Codes, Pavement Design, Geometric Design, Road Safety, Drainage, Land Acquisition and Environmental norms. You perform professional DPR compliance audits for Indian Road/Highway projects. You are technically rigorous. You never hallucinate clause numbers.",
             messages:[{role:"user",content:blocks}]
           });
 
