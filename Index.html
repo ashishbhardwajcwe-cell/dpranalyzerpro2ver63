@@ -494,7 +494,7 @@ for(var fi=0;fi<IRC_FILES.length;fi++){
             setPct(function(prev){return Math.min(prev+2,85)});
           },3000);
 
-          var body=JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:32000,
+          var body=JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:32000,
             system:"You are a senior highway design auditor with 20+ years experience in IRC Codes, MoRTH Specifications (5th Revision), Bridge and Culvert Codes, Pavement Design, Geometric Design, Road Safety, Drainage, Seismic codes, Land Acquisition and Environmental norms. You perform professional DPR compliance audits for Indian Road/Highway projects. You are technically rigorous. You never hallucinate clause numbers.",
             messages:[{role:"user",content:blocks}]
           });
