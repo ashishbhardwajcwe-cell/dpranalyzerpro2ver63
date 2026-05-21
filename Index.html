@@ -16,6 +16,8 @@
     @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
     @keyframes dotGlow{0%,100%{box-shadow:0 0 4px rgba(34,197,94,0.4)}50%{box-shadow:0 0 12px rgba(34,197,94,0.8)}}
+    @keyframes pcSpin{to{transform:rotate(360deg)}}
+    .pc-spin{animation:pcSpin .8s linear infinite}
     ::selection{background:#0D9488;color:#fff}
     input:focus,textarea:focus{border-color:#0D9488!important;box-shadow:0 0 0 3px rgba(13,148,136,.1)!important}
     button{font-family:'Outfit',sans-serif}
@@ -381,6 +383,13 @@
       var results=props.results;
       var s1=useState("all"),filterSev=s1[0],setFilterSev=s1[1];
       var s2=useState("all"),filterCat=s2[0],setFilterCat=s2[1];
+      /* Podcast (audio overview) state */
+      var ps1=useState("idle"),pcStatus=ps1[0],setPcStatus=ps1[1]; /* idle|scripting|audio|ready|error */
+      var ps2=useState(""),pcMsg=ps2[0],setPcMsg=ps2[1];
+      var ps3=useState(""),pcUrl=ps3[0],setPcUrl=ps3[1];
+      var ps4=useState(""),pcErr=ps4[0],setPcErr=ps4[1];
+      var ps5=useState(null),pcScript=ps5[0],setPcScript=ps5[1];
+      var ps6=useState(false),pcShowText=ps6[0],setPcShowText=ps6[1];
       if(!results) return null;
       var defs=results.deficiencies||[];
       var counts={};["critical","major","minor","observation"].forEach(function(k){counts[k]=defs.filter(function(d){return d.severity===k}).length});
@@ -556,6 +565,113 @@
         w.document.write(buildReportHTML("print"));w.document.close();w.focus();
       }
 
+      /* ===== Podcast / Audio Overview (NotebookLM-style two-host) ===== */
+      /* Two hosts. Voice names are Gemini prebuilt voices. */
+      var PC_SPEAKERS={A:{name:"Anjali",voice:"Kore"},B:{name:"Rohan",voice:"Puck"}};
+
+      function pcB64ToBytes(b64){var bin=atob(b64);var n=bin.length;var u=new Uint8Array(n);for(var i=0;i<n;i++)u[i]=bin.charCodeAt(i);return u}
+
+      function pcmToWavBlob(pcm,rate){
+        var numCh=1,bps=16,byteRate=rate*numCh*bps/8,blockAlign=numCh*bps/8,ds=pcm.length;
+        var buf=new ArrayBuffer(44+ds),v=new DataView(buf);
+        function wstr(o,s){for(var i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))}
+        wstr(0,"RIFF");v.setUint32(4,36+ds,true);wstr(8,"WAVE");wstr(12,"fmt ");
+        v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,numCh,true);
+        v.setUint32(24,rate,true);v.setUint32(28,byteRate,true);v.setUint16(32,blockAlign,true);v.setUint16(34,bps,true);
+        wstr(36,"data");v.setUint32(40,ds,true);
+        var out=new Uint8Array(buf);out.set(pcm,44);
+        return new Blob([out],{type:"audio/wav"});
+      }
+
+      async function pcGenerateScript(){
+        var hdr=results.reportHeader||{};
+        var proj=hdr.projectName||"this BRO road project";
+        var ordr={critical:0,major:1,minor:2,observation:3};
+        var defs=(results.deficiencies||[]).slice().sort(function(a,b){return (ordr[a.severity]==null?9:ordr[a.severity])-(ordr[b.severity]==null?9:ordr[b.severity])});
+        var top=defs.slice(0,10);
+        var lines=[];
+        lines.push("PROJECT: "+proj+(hdr.roadNumber?" ("+hdr.roadNumber+")":""));
+        lines.push("COMPLIANCE SCORE: "+results.complianceScore+"%");
+        lines.push("RISK LEVEL: "+(results.riskLevel||"Not stated"));
+        lines.push("OVERALL SUMMARY: "+(results.summary||""));
+        lines.push("");
+        lines.push("KEY DEFICIENCIES (most important first):");
+        top.forEach(function(d,i){
+          var cl=(d.documentName&&d.documentName!=="General Observation")?(" ["+d.documentName+" "+(d.clauseNumber||"")+"]"):"";
+          lines.push((i+1)+". ("+(d.severity||"")+") "+(d.title||"")+cl);
+          if(d.failureReason||d.description)lines.push("   Problem: "+String(d.failureReason||d.description).slice(0,300));
+          if(d.impact)lines.push("   Why it matters: "+String(d.impact).slice(0,220));
+          if(d.correctiveAction||d.recommendation)lines.push("   Fix: "+String(d.correctiveAction||d.recommendation).slice(0,220));
+        });
+        var digest=lines.join("\n");
+        var sys="You are a scriptwriter for an audio overview, in the style of a friendly two-host podcast (like NotebookLM Audio Overviews). Two Indian-English hosts discuss a technical engineering report so a non-specialist can follow it. Host A is \"Anjali\", a senior highway reviewing engineer who explains clearly. Host B is \"Rohan\", a curious co-host who asks the questions a layperson would ask. Keep it warm, natural and conversational with short turns, light back-and-forth, and the occasional brief reaction. Explain any jargon in plain words. Cover: what the project is, the overall compliance score and risk level and what they mean, the 4 to 6 most important problems in plain terms (what is wrong, why it matters for a high-altitude mountain road, and how to fix it), and a clear bottom-line takeaway. Aim for about 2.5 to 3.5 minutes of speech, roughly 16 to 22 short turns. Open with a quick welcome and close with a sign-off. Output STRICT JSON only, no markdown, no backticks, in exactly this shape: {\"title\":\"...\",\"turns\":[{\"speaker\":\"A\",\"text\":\"...\"}]} where speaker is exactly \"A\" for Anjali or \"B\" for Rohan. Do NOT put the speaker name inside the text.";
+        var body=JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:4000,system:sys,messages:[{role:"user",content:"Create the audio-overview podcast script from this DPR compliance analysis:\n\n"+digest}]});
+        var r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:body});
+        if(!r.ok){var e={};try{e=await r.json()}catch(x){}throw new Error((e.error&&e.error.message)||("Script generation failed ("+r.status+")"))}
+        var dd=await r.json();
+        var t=dd.content.map(function(b){return b.type==="text"?b.text:""}).join("");
+        var c=cleanJSON(t);if(!c)throw new Error("Could not read the generated script.");
+        var parsed=JSON.parse(c);
+        if(!parsed.turns||!parsed.turns.length)throw new Error("The generated script was empty.");
+        parsed.turns=parsed.turns.filter(function(x){return x&&x.text&&String(x.text).trim()}).map(function(x){return {speaker:(x.speaker==="B"?"B":"A"),text:String(x.text).trim()}});
+        return parsed;
+      }
+
+      async function pcSynthChunk(turns){
+        var present={};turns.forEach(function(t){present[t.speaker]=true});
+        var keys=Object.keys(present);
+        var speechConfig;
+        if(keys.length>=2){
+          speechConfig={multiSpeakerVoiceConfig:{speakerVoiceConfigs:keys.map(function(k){return {speaker:PC_SPEAKERS[k].name,voiceConfig:{prebuiltVoiceConfig:{voiceName:PC_SPEAKERS[k].voice}}}})}};
+        }else{
+          var only=keys[0]||"A";
+          speechConfig={voiceConfig:{prebuiltVoiceConfig:{voiceName:PC_SPEAKERS[only].voice}}};
+        }
+        var prompt="Read this podcast conversation aloud in a warm, friendly, natural tone:\n"+turns.map(function(t){return PC_SPEAKERS[t.speaker].name+": "+t.text}).join("\n");
+        var body=JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:speechConfig}});
+        var url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key="+encodeURIComponent(props.geminiKey);
+        var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+        if(!r.ok){var e={};try{e=await r.json()}catch(x){}throw new Error((e.error&&e.error.message)||("Audio generation failed ("+r.status+")"))}
+        var dd=await r.json();
+        var cand=dd&&dd.candidates&&dd.candidates[0];
+        var part=cand&&cand.content&&cand.content.parts&&cand.content.parts[0];
+        var inl=part&&part.inlineData;
+        if(!inl||!inl.data)throw new Error("No audio was returned for one segment.");
+        var rate=24000;var m=/rate=(\d+)/.exec(inl.mimeType||"");if(m)rate=parseInt(m[1]);
+        return {pcm:pcB64ToBytes(inl.data),rate:rate};
+      }
+
+      async function generatePodcast(){
+        if(pcStatus==="scripting"||pcStatus==="audio")return;
+        if(!props.apiKey){setPcErr("The analysis engine key is not available.");setPcStatus("error");return}
+        if(!props.geminiKey){setPcErr("The podcast voice service is not configured. Add a GEMINI_API_KEY in the Netlify environment to enable audio overviews.");setPcStatus("error");return}
+        if(pcUrl){try{URL.revokeObjectURL(pcUrl)}catch(e){}}
+        setPcUrl("");setPcErr("");setPcShowText(false);
+        try{
+          setPcStatus("scripting");setPcMsg("Writing the podcast script...");
+          var script=await pcGenerateScript();
+          setPcScript(script);
+          setPcStatus("audio");
+          var chunks=[];var cur=[];var curLen=0;
+          script.turns.forEach(function(t){
+            var L=t.text.length+12;
+            if(curLen+L>1100&&cur.length>0){chunks.push(cur);cur=[];curLen=0}
+            cur.push(t);curLen+=L;
+          });
+          if(cur.length)chunks.push(cur);
+          var rate=24000;var parts=[];var totalLen=0;
+          for(var i=0;i<chunks.length;i++){
+            setPcMsg("Generating audio "+(i+1)+" of "+chunks.length+"...");
+            var seg=await pcSynthChunk(chunks[i]);
+            rate=seg.rate;parts.push(seg.pcm);totalLen+=seg.pcm.length;
+          }
+          var all=new Uint8Array(totalLen);var off=0;
+          parts.forEach(function(p){all.set(p,off);off+=p.length});
+          var u=URL.createObjectURL(pcmToWavBlob(all,rate));
+          setPcUrl(u);setPcMsg("");setPcStatus("ready");
+        }catch(err){setPcErr(err.message||"Podcast generation failed.");setPcStatus("error")}
+      }
+
       return(
         <div>
           <div style={{background:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",borderRadius:"18px",padding:"28px",marginBottom:"24px",color:"#fff",position:"relative",overflow:"hidden"}}>
@@ -565,6 +681,7 @@
                 <button onClick={handleDownloadPDF} title="Open a print dialog \u2014 choose 'Save as PDF'" style={{backgroundColor:"#DC2626",border:"1px solid #DC2626",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:700}}>{"\u{1F4C4} PDF"}</button>
                 <button onClick={handleDownloadWord} title="Download an editable .doc file" style={{backgroundColor:"#1D4ED8",border:"1px solid #1D4ED8",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:700}}>{"\u{1F4DD} Word (.docx)"}</button>
                 <button onClick={handlePrint} title="Clean on-screen print view" style={{backgroundColor:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F5A8}\uFE0F Print View"}</button>
+                <button onClick={generatePodcast} disabled={pcStatus==="scripting"||pcStatus==="audio"} title="Generate a short two-host audio overview of this report" style={{background:(pcStatus==="scripting"||pcStatus==="audio")?"#7C3AED":"linear-gradient(135deg,#7C3AED,#9333EA)",border:"1px solid #7C3AED",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:(pcStatus==="scripting"||pcStatus==="audio")?"wait":"pointer",fontSize:"12px",fontWeight:700,opacity:(pcStatus==="scripting"||pcStatus==="audio")?0.8:1}}>{(pcStatus==="scripting"||pcStatus==="audio")?"\u{1F399}\uFE0F Generating\u2026":"\u{1F399}\uFE0F Podcast"}</button>
                 <button onClick={props.onReset} style={{backgroundColor:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",padding:"8px 16px",borderRadius:"8px",cursor:"pointer",fontSize:"12px",fontWeight:600}}>{"\u{1F504} New Analysis"}</button>
               </div>
             </div>
@@ -577,6 +694,43 @@
               </div>
             </div>
           </div>
+          {pcStatus!=="idle"&&(
+            <div className="no-print" style={{marginBottom:"16px",borderRadius:"14px",border:"1px solid #DDD6FE",background:"linear-gradient(135deg,#F5F3FF,#FAF5FF)",padding:"18px 20px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px",flexWrap:"wrap"}}>
+                <span style={{fontSize:"20px"}}>{"\u{1F399}️"}</span>
+                <strong style={{fontSize:"15px",color:"#5B21B6"}}>Audio Overview</strong>
+                <span style={{fontSize:"11px",color:"#7C3AED",background:"#EDE9FE",padding:"2px 8px",borderRadius:"20px",fontWeight:600}}>Two-host podcast</span>
+              </div>
+              {pcStatus==="error"?(
+                <div style={{fontSize:"13px",color:"#B91C1C",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:"8px",padding:"10px 14px"}}>
+                  <strong>Couldn't generate the podcast.</strong>
+                  <div style={{marginTop:"4px",lineHeight:1.5}}>{pcErr}</div>
+                  <button onClick={generatePodcast} style={{marginTop:"8px",padding:"7px 14px",borderRadius:"8px",border:"none",background:"#7C3AED",color:"#fff",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>{"↻ Try again"}</button>
+                </div>
+              ):(pcStatus==="ready"&&pcUrl)?(
+                <div>
+                  <audio controls src={pcUrl} style={{width:"100%",marginBottom:"10px"}}/>
+                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                    <a href={pcUrl} download={safeFileBase()+"_podcast.wav"} style={{textDecoration:"none",padding:"7px 14px",borderRadius:"8px",background:"#7C3AED",color:"#fff",fontSize:"12px",fontWeight:700}}>{"⬇️ Download audio"}</a>
+                    <button onClick={function(){setPcShowText(!pcShowText)}} style={{padding:"7px 14px",borderRadius:"8px",border:"1px solid #C4B5FD",background:"#fff",color:"#6D28D9",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>{pcShowText?"Hide transcript":"Show transcript"}</button>
+                    <button onClick={generatePodcast} style={{padding:"7px 14px",borderRadius:"8px",border:"1px solid #C4B5FD",background:"#fff",color:"#6D28D9",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>{"↻ Regenerate"}</button>
+                  </div>
+                  {pcShowText&&pcScript&&(
+                    <div style={{marginTop:"12px",background:"#fff",border:"1px solid #E9D5FF",borderRadius:"8px",padding:"12px 14px",maxHeight:"260px",overflowY:"auto"}}>
+                      {pcScript.title&&<div style={{fontWeight:700,fontSize:"13px",color:"#1a1a2e",marginBottom:"8px"}}>{pcScript.title}</div>}
+                      {pcScript.turns.map(function(t,i){var nm=t.speaker==="B"?PC_SPEAKERS.B.name:PC_SPEAKERS.A.name;var col=t.speaker==="B"?"#9333EA":"#0D9488";return <div key={i} style={{marginBottom:"7px",fontSize:"12px",lineHeight:1.6}}><span style={{fontWeight:700,color:col}}>{nm+": "}</span><span style={{color:"#334155"}}>{t.text}</span></div>})}
+                    </div>
+                  )}
+                </div>
+              ):(
+                <div style={{display:"flex",alignItems:"center",gap:"10px",fontSize:"13px",color:"#6D28D9"}}>
+                  <span className="pc-spin" style={{display:"inline-block",width:"16px",height:"16px",border:"2px solid #DDD6FE",borderTopColor:"#7C3AED",borderRadius:"50%"}}/>
+                  <span>{pcMsg||"Working..."}</span>
+                </div>
+              )}
+              <div style={{marginTop:"10px",fontSize:"10px",color:"#A78BFA"}}>Auto-generated spoken overview for quick understanding. Always refer to the full written report for engineering decisions.</div>
+            </div>
+          )}
           {cats.length>0&&(<div className="no-print" style={{marginBottom:"16px"}}><div style={{fontSize:"12px",fontWeight:700,color:"#94A3B8",textTransform:"uppercase",marginBottom:"8px"}}>Filter by Category</div><div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}><button onClick={function(){setFilterCat("all")}} style={{padding:"6px 12px",borderRadius:"8px",fontSize:"12px",fontWeight:600,border:filterCat==="all"?"2px solid #0D9488":"1.5px solid #E2E8F0",backgroundColor:filterCat==="all"?"#F0FDFA":"#fff",color:filterCat==="all"?"#0D9488":"#64748B",cursor:"pointer"}}>{"All ("+total+")"}</button>{cats.map(function(cat){var cc=CATEGORY_CONFIG[cat]||{emoji:"\u{1F4CB}",color:"#64748B"};var n=defs.filter(function(d){return d.category===cat}).length;return <button key={cat} onClick={function(){setFilterCat(filterCat===cat?"all":cat)}} style={{padding:"6px 12px",borderRadius:"8px",fontSize:"12px",fontWeight:600,border:filterCat===cat?"2px solid "+cc.color:"1.5px solid #E2E8F0",backgroundColor:filterCat===cat?cc.color+"10":"#fff",color:filterCat===cat?cc.color:"#64748B",cursor:"pointer"}}>{cc.emoji+" "+cat+" ("+n+")"}</button>})}</div></div>)}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
             <h3 style={{margin:0,fontSize:"17px",fontWeight:700,color:"#1a1a2e"}}>{"Deficiencies ("+filtered.length+((filterSev!=="all"||filterCat!=="all")?" of "+total:"")+")"}</h3>
@@ -640,6 +794,7 @@
       var s20=useState([]),glLoaded=s20[0],setGlLoaded=s20[1];     /* [{file, version, bytes}] */
       var s21=useState([]),glFailedList=s21[0],setGlFailedList=s21[1];
       var apiKeyRef=useRef("");
+      var geminiKeyRef=useRef("");
       var msgIdx=useRef(0);
       var ircCacheRef=useRef({}); /* Ver63: file -> text */
 
@@ -648,7 +803,7 @@
         fetch("/.netlify/functions/get-config",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
         .then(function(r){return r.json()})
         .then(function(d){
-          if(d.status==="ok"&&d.key){apiKeyRef.current=d.key;setApiStatus("ready")}
+          if(d.status==="ok"&&d.key){apiKeyRef.current=d.key;if(d.gemini)geminiKeyRef.current=d.gemini;setApiStatus("ready")}
           else{setApiStatus("error")}
         })
         .catch(function(){setApiStatus("error")});
@@ -959,7 +1114,7 @@
             )}
 
             {/* STEP 4: Results */}
-            {step===4&&results&&(<div style={{animation:"fadeIn 0.3s ease"}}><ResultsDashboard results={results} onReset={resetAll}/></div>)}
+            {step===4&&results&&(<div style={{animation:"fadeIn 0.3s ease"}}><ResultsDashboard results={results} onReset={resetAll} apiKey={apiKeyRef.current} geminiKey={geminiKeyRef.current}/></div>)}
 
             {/* ERROR */}
             {error&&(
