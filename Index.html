@@ -606,7 +606,7 @@
         var digest=lines.join("\n");
         var sys="You are a scriptwriter for an audio overview, in the style of a friendly two-host podcast (like NotebookLM Audio Overviews). Two Indian-English hosts discuss a technical engineering report so a non-specialist can follow it. Host A is \"Anjali\", a senior highway reviewing engineer who explains clearly. Host B is \"Rohan\", a curious co-host who asks the questions a layperson would ask. Keep it warm, natural and conversational with short turns, light back-and-forth, and the occasional brief reaction. Explain any jargon in plain words. Cover: what the project is, the overall compliance score and risk level and what they mean, the 4 to 6 most important problems in plain terms (what is wrong, why it matters for a high-altitude mountain road, and how to fix it), and a clear bottom-line takeaway. Aim for about 2.5 to 3.5 minutes of speech, roughly 16 to 22 short turns. Open with a quick welcome and close with a sign-off. Output STRICT JSON only, no markdown, no backticks, in exactly this shape: {\"title\":\"...\",\"turns\":[{\"speaker\":\"A\",\"text\":\"...\"}]} where speaker is exactly \"A\" for Anjali or \"B\" for Rohan. Do NOT put the speaker name inside the text.";
         var body=JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:4000,system:sys,messages:[{role:"user",content:"Create the audio-overview podcast script from this DPR compliance analysis:\n\n"+digest}]});
-        var r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:body});
+        var r=await fetch("/.netlify/functions/anthropic-proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:body});
         if(!r.ok){var e={};try{e=await r.json()}catch(x){}throw new Error((e.error&&e.error.message)||("Script generation failed ("+r.status+")"))}
         var dd=await r.json();
         var t=dd.content.map(function(b){return b.type==="text"?b.text:""}).join("");
@@ -629,8 +629,7 @@
         }
         var prompt="Read this podcast conversation aloud in a warm, friendly, natural tone:\n"+turns.map(function(t){return PC_SPEAKERS[t.speaker].name+": "+t.text}).join("\n");
         var body=JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:speechConfig}});
-        var url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key="+encodeURIComponent(props.geminiKey);
-        var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+        var r=await fetch("/.netlify/functions/gemini-tts",{method:"POST",headers:{"Content-Type":"application/json"},body:body});
         if(!r.ok){var e={};try{e=await r.json()}catch(x){}throw new Error((e.error&&e.error.message)||("Audio generation failed ("+r.status+")"))}
         var dd=await r.json();
         var cand=dd&&dd.candidates&&dd.candidates[0];
@@ -643,7 +642,6 @@
 
       async function generatePodcast(){
         if(pcStatus==="scripting"||pcStatus==="audio")return;
-        if(!props.apiKey){setPcErr("The analysis engine key is not available.");setPcStatus("error");return}
         if(!props.geminiKey){setPcErr("The podcast voice service is not configured. Add a GEMINI_API_KEY in the Netlify environment to enable audio overviews.");setPcStatus("error");return}
         if(pcUrl){try{URL.revokeObjectURL(pcUrl)}catch(e){}}
         setPcUrl("");setPcErr("");setPcShowText(false);
